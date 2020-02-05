@@ -60,7 +60,6 @@ export class EscapeSequenceParser {
     private customColorMode: number = 0;
 
     private _attribute: DataBlockAttribute = new DataBlockAttribute();
-    private styles: Styles = Styles.getStyles();
 
     constructor(terminal: Terminal, parser: Parser) {
         this.parser = parser;
@@ -1535,10 +1534,7 @@ export class EscapeSequenceParser {
 
         if (typeof params === 'object') {
 
-            let len = params.length
-                , i = 0;
-
-            for (; i < len; i++) {
+            for (let len = params.length, i = 0; i < len; i++) {
                 if (this.customColorMode !== 0) {
                     let color = "", name = "";
                     if (params[i] === 2) {
