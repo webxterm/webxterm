@@ -74,14 +74,14 @@ export class Terminal {
     constructor(args: { [key: string]: any }) {
         const now = new Date();
         const today = new Date(now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate()).getTime();
-        this._instanceId = "ins_" + (now.getTime() - today);
+        this._instanceId = "ins_" + Math.abs(now.getTime() - today);
 
         this.instance = args["instance"];
         this.onRender = args["render"];
         this.wsServer = args["wsServer"];
 
-        this._preferences = new Preferences();
-        this._preferences.init(this._instanceId);
+        this._preferences = new Preferences(this);
+        this._preferences.init();
 
         this.initViewPort();
 
@@ -138,8 +138,11 @@ export class Terminal {
         this._clipboard.className = "clipboard";
 
         // 默认字符大小
-        this.charWidth = 9.633331298828125;
-        this.charHeight = 19;
+        // this.charWidth = 9.633331298828125;
+        // this.charHeight = 19;
+        this.charWidth = 6.4166717529296875;
+        this.charHeight = 13;
+
 
         // 渲染完成
         this.onRender({
@@ -216,7 +219,7 @@ export class Terminal {
     /**
      * 获取字符的宽度和高度
      */
-    private measure(): void {
+    public measure(): void {
 
         this._viewport.appendChild(this.measureDiv);
         this.measureSpan.innerHTML = 'W';
@@ -243,11 +246,11 @@ export class Terminal {
 
         let rowRect = this.measureDiv.getBoundingClientRect();
         this._columns = Math.floor(rowRect.width / value);
-        let paddingRight = rowRect.width - this._columns * value;
+        // let paddingRight = rowRect.width - this._columns * value;
 
-        Styles.add(".viewport", {
-            "padding-right": paddingRight + "px"
-        }, this._instanceId);
+        // Styles.add(".viewport", {
+        //     "padding-right": paddingRight + "px"
+        // }, this._instanceId);
 
         Styles.add(".len2", {
             "width": value * 2 + "px"
@@ -302,6 +305,7 @@ export class Terminal {
         this.transceiver = new Transceiver(this.wsServer, this);
         this.transceiver.open().then((e: any) => {
             console.info(e);
+            // 连接成功
 
             if(this.transceiver){
                 this.transceiver.send(JSON.stringify({
@@ -312,7 +316,7 @@ export class Terminal {
                         port: port
                     },
                     size: {
-                        w: 80,
+                        w: this.columns,
                         h: 24
                     },
                     term: 'xterm',

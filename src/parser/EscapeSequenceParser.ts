@@ -59,6 +59,7 @@ export class EscapeSequenceParser {
     // 自定义颜色，默认为0，可用值 38 & 48
     private customColorMode: number = 0;
 
+    // 字符属性
     private _attribute: DataBlockAttribute = new DataBlockAttribute();
 
     constructor(terminal: Terminal, parser: Parser) {
@@ -1607,7 +1608,10 @@ export class EscapeSequenceParser {
                 this._attribute.bold = true;
                 // 加粗高亮配置
                 if(this.preferences.showBoldTextInBrightColor){
-                    console.info('preferences:', this.preferences);
+                    if(!!this.attribute.color){
+                        const index = Preferences.paletteColorNames.indexOf(this.attribute.color);
+                        this.attribute.color = Preferences.paletteColorNames[index + 8];
+                    }
                 }
                 break;
             case 2:
@@ -1706,7 +1710,7 @@ export class EscapeSequenceParser {
                         // 高亮字体颜色
                         // 以亮色显示粗体文本
                         if(num === 90 || (this.attribute.bold && this.preferences.showBoldTextInBrightColor)){
-                            colorName = Preferences.paletteColorNames[params - num + 7];
+                            colorName = Preferences.paletteColorNames[params - num + 8];
                         } else {
                             colorName = Preferences.paletteColorNames[params - num];
                         }
@@ -1719,7 +1723,7 @@ export class EscapeSequenceParser {
                     case 100:
                         // 背景颜色
                         // 高亮字体颜色
-                        this.attribute.backgroundColor =  "_" + Preferences.paletteColorNames[params - num + 7];
+                        this.attribute.backgroundColor =  "_" + Preferences.paletteColorNames[params - num + 8];
                         break;
                     default:
                         // 0

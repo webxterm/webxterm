@@ -1,3 +1,5 @@
+
+
 export class CommonUtils {
 
      // 系统内置颜色
@@ -362,6 +364,16 @@ export class CommonUtils {
         return 'rgba(' + parseInt(r, 16) + ', ' +
             parseInt(g, 16) + ', ' + parseInt(b, 16) +
             ', ' + a1 + ')';
+    }
+
+    /**
+     * 生成随机字符串
+     */
+    static getUUID(){
+        return (Math.random() + "-"
+            + new Date().getTime() + "-"
+            + Math.random() + "-"
+            + Math.random()).replace(/\./g, "");
     }
 
 }

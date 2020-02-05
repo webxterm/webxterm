@@ -9,13 +9,14 @@ export class DataBlock implements Block {
     // 数据
     private value: string = "";
 
-    private attr: DataBlockAttribute = new DataBlockAttribute();
+    private attr: DataBlockAttribute;
 
     // 数据更新版本号，默认为0，每次数据更新的时候，都会+1
     private version = 0;
 
-    constructor(data: string = "", attr: DataBlockAttribute = new DataBlockAttribute()) {
+    constructor(data: string = "", attr: DataBlockAttribute) {
         this.data = data;
+        this.attr = new DataBlockAttribute();
         // this.attribute = JSON.parse(JSON.stringify(attr));
         this.copyValue(attr);
     }
@@ -48,17 +49,7 @@ export class DataBlock implements Block {
         this.copyValue(attr);
     }
 
-    public static newBlankBlock(): DataBlock {
-        return new DataBlock(" ");
-    }
-
-    public static newBlock(): DataBlock {
-        return new DataBlock();
-    }
-
-    private copyValue(attr: DataBlockAttribute) : void {
-
-        console.info("copyValue>>>");
+    public copyValue(attr: DataBlockAttribute) : void {
 
         this.attribute.backgroundColor = attr.backgroundColor;
         this.attribute.color = attr.color;
@@ -72,6 +63,7 @@ export class DataBlock implements Block {
         this.attribute.slowBlink = attr.slowBlink;
         this.attribute.tab = attr.tab;
         this.attribute.underline = attr.underline;
+
     }
 
     /**

@@ -4,6 +4,7 @@
 import {Logger} from "./common/Logger";
 import {CommonUtils} from "./common/CommonUtils";
 import {Styles} from "./Styles";
+import {Terminal} from "./Terminal";
 
 export class Preferences {
 
@@ -164,17 +165,22 @@ export class Preferences {
     // 日志打印
     private logger: Logger = Logger.getLogger("Preferences");
 
-    private instanceId: string | undefined;
+    private instanceId: string;
+
+    private terminal: Terminal;
+
+    constructor(terminal: Terminal) {
+        this.terminal = terminal;
+        this.instanceId = terminal.instanceId;
+    }
 
     /**
      * 初始化
      */
-    init(instanceId: string): void {
-
-        this.instanceId = instanceId;
+    init(): void {
 
         this.colorScheme = "Green on black";
-        this.boldColor = "#000000";
+        this.boldColor = "#FF6666";
         this.highlightColor = "#FFFFFF";
         this.highlightBackgroundColor = "#000000";
 
@@ -189,7 +195,7 @@ export class Preferences {
         this.backgroundSize = "100% 100%";
 
         this.fontFamily = "DejaVuSansMono";
-        this.fontSize = "12pt";
+        this.fontSize = "8pt";
 
         this.showBoldTextInBrightColor = true;
         this.paletteScheme = "Tango";
@@ -212,26 +218,27 @@ export class Preferences {
         this._colorScheme = value;
 
         let [color, background] = Preferences.colorSchemes[this._colorScheme];
-        this.color = color;
-        this.backgroundColor = background;
+        this.color = CommonUtils.parseColor(color, 0.99);
+        this.backgroundColor = CommonUtils.parseColor(background, 0.99);
 
         // 如果设置了背景图片的话，不需要设置背景颜色。
         if (background && !CommonUtils.isEmpty(this.backgroundImage))
-            background = "transparent";
+            this.backgroundColor = "transparent";
 
         Styles.add(".container", {
-            "color": color || "",
-            "background-color": background
+            "color": this.color || "",
+            "background-color": this.backgroundColor
         }, this.instanceId);
 
         // 反向
         Styles.add(".inverse", {
-            "color": background + " !important",
-            "background-color": color + " !important"
+            "color": this.backgroundColor + " !important",
+            "background-color": this.color + " !important"
         }, this.instanceId);
 
         // 选中字体颜色
-        Styles.add([".tab::selection",
+        Styles.add([
+            ".tab::selection",
             ".len2::selection",
             ".viewport-row::selection",
             ".tab::-moz-selection",
@@ -240,17 +247,16 @@ export class Preferences {
             ".tab::-webkit-selection",
             ".len2::-webkit-selection",
             ".viewport-row::-webkit-selection"], {
-            "color": background,
-            "background-color": color
+            "color": this.backgroundColor,
+            "background-color": this.color
         }, this.instanceId);
 
         // 联想输入下划线
         Styles.add(".composition:after", {
-            "border-bottom": "2px solid " + color
+            "border-bottom": "2px solid " + this.color
         }, this.instanceId);
 
     }
-
 
     get color(): string {
         return this._color;
@@ -273,11 +279,19 @@ export class Preferences {
     }
 
     set boldColor(value: string) {
-        this._boldColor = value;
+        this._boldColor = CommonUtils.parseColor(value, 0.99);
 
         // 加粗颜色
         Styles.add(".bold", {
-            "color": value + " !important"
+            "color": this._boldColor
+        }, this.instanceId);
+
+        Styles.add([
+            ".bold::selection",
+            ".bold::-moz-selection",
+            ".bold::-webkit-selection"], {
+            color: this.backgroundColor,
+            "background-color": this._boldColor
         }, this.instanceId);
     }
 
@@ -396,7 +410,7 @@ export class Preferences {
     }
 
     set cursorColor(value: string) {
-        this._cursorColor = value;
+        this._cursorColor = CommonUtils.parseColor(value, 0.99);
 
         if (this.cursorShape === "Block") {
             Styles.addCursorStyle(".cursor.cursor-shape-block.cursor-focus", {
@@ -410,7 +424,7 @@ export class Preferences {
     }
 
     set cursorBackgroundColor(value: string) {
-        this._cursorBackgroundColor = value;
+        this._cursorBackgroundColor = CommonUtils.parseColor(value, 0.99);
 
         switch (this.cursorShape) {
             case "Block":
@@ -466,10 +480,9 @@ export class Preferences {
             "background-image": !!this.backgroundImage ? `url(${this.backgroundImage})` : ""
         }, this.instanceId);
 
-        let [color, background] = Preferences.colorSchemes[this._colorScheme];
         Styles.add(".container", {
-            "color": color || "",
-            "background-color": !!this.backgroundImage ? "" : background
+            "color": this.color || "",
+            "background-color": !!this.backgroundImage ? "" : this.backgroundColor
         }, this.instanceId);
 
     }
@@ -515,6 +528,10 @@ export class Preferences {
         Styles.add(".measure", {
             "font-family": this.fontFamily
         }, this.instanceId);
+
+        // 获取字符的尺寸
+        this.terminal.measure();
+
     }
 
     get fontSize(): string {
@@ -531,6 +548,9 @@ export class Preferences {
         Styles.add(".measure", {
             "font-size": this.fontSize
         }, this.instanceId);
+
+        // 获取字符的尺寸
+        this.terminal.measure();
     }
 
     get showBoldTextInBrightColor(): boolean {
@@ -553,30 +573,30 @@ export class Preferences {
         for(let i = 0, len = Preferences.paletteColorNames.length; i < len; i++){
 
             const colorName = Preferences.paletteColorNames[i];
-
             // color
+            const color = CommonUtils.parseColor(colors[i], 0.99);
 
             Styles.add("." + colorName, {
-                color: colors[i]
+                color: color + " !important"
             }, this.instanceId);
             Styles.add([
                 "." + colorName + "::selection",
                 "." + colorName + "::-moz-selection",
                 "." + colorName + "::-webkit-selection"], {
                 color: this.backgroundColor,
-                "background-color": colors[i]
+                "background-color": color
             }, this.instanceId);
 
             // background color
 
             Styles.add("._" + colorName, {
-                "background-color": colors[i]
+                "background-color": color + " !important"
             }, this.instanceId);
             Styles.add([
                 "._" + colorName + "::selection",
                 "._" + colorName + "::-moz-selection",
                 "._" + colorName + "::-webkit-selection"], {
-                color: colors[i],
+                color: color,
                 "background-color": this.color
             }, this.instanceId);
 
@@ -616,4 +636,5 @@ export class Preferences {
         this._visualBellColor = value;
     }
 
+    
 }

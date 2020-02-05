@@ -6,11 +6,6 @@ html, body{ margin: 0; width: 100%; height: 100%; overflow: hidden; font-size: 1
 }
 
 @font-face {
-    font-family: 'monospace';
-    src: url("./font/monospace.ttf");
-}
-
-@font-face {
     font-family: 'UbuntuMono';
     src: url("./font/ubuntu/UbuntuMono-R.ttf");
 }

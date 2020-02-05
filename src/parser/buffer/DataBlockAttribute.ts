@@ -1,3 +1,4 @@
+import {CommonUtils} from "../../common/CommonUtils";
 
 export class DataBlockAttribute {
 
@@ -40,6 +41,7 @@ export class DataBlockAttribute {
     // 背景颜色class
     private backgroundColorClass: string = "";
 
+    id: string = CommonUtils.getUUID();
 
     get tab(): boolean {
         return this.isTab;

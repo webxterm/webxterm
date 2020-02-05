@@ -5,7 +5,7 @@
     <title>Title</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../css/terminal.css">
-    <script type="text/javascript" src="../dist/webxterm.js?version=1.2"></script>
+    <script type="text/javascript" src="../dist/webxterm.js?version=1.3"></script>
 </head>
 <body>
 
@@ -15,14 +15,14 @@
 
         let terminal = new webxterm.Terminal({
             instance: document.getElementById('test'),
-            wsServer: "ws://127.0.0.1:8899",
+            wsServer: "ws://192.168.0.108:8899",
             render: (args) => {
                 console.info(args.instance);
             }
         }).on('render', (r) => {
             console.info(r);
         }).open(
-            '127.0.0.1',
+            '192.168.0.108',
             'fei00',
             '0000',
             22

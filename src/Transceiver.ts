@@ -13,28 +13,37 @@ export class Transceiver {
 
     private terminal: Terminal;
 
+    // 连接成功
+    private connected: boolean = false;
+
     constructor(wsServer: string, terminal: Terminal) {
         if (!!wsServer)
             this.wsServer = wsServer;
+
+
         this.terminal = terminal;
     }
 
     /**
      * 连接到websocket服务器
      */
-    public open() {
+    public open(): Promise<any> {
+
         return new Promise((resolve, reject) => {
-            let socket = new WebSocket(this.wsServer);
-            socket.onopen = e => {
+
+            this._socket = new WebSocket(this.wsServer);
+            this._socket.onopen = (e) => {
+                // 连接成功
+                this.connected = true;
                 resolve(e);
             };
-            socket.onclose = e => {
+            this._socket.onclose = (e) => {
                 reject(e);
             };
-            socket.onerror = e => {
+            this._socket.onerror = (e) => {
                 reject(e);
             };
-            socket.onmessage = e => {
+            this._socket.onmessage = (e) => {
                 if (!this._version) {
                     this._version = JSON.parse(e.data);
                 } else {
@@ -42,8 +51,6 @@ export class Transceiver {
                     this.terminal.startPrinter();
                 }
             };
-
-            this._socket = socket;
         });
     }
 
@@ -52,6 +59,7 @@ export class Transceiver {
      * @param data
      */
     public send(data: string): void {
+        console.info("send.data>>>" + data);
         if (this._socket) {
             this._socket.send(data)
         }

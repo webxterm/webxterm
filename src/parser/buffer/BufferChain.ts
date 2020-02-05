@@ -17,7 +17,7 @@ export class BufferChain {
      * @param index
      */
     public addBlankBlock(index: number = -1): void {
-        this.addBlock(DataBlock.newBlankBlock(), index);
+        this.addBlock(new DataBlock(" ", new DataBlockAttribute()), index);
     }
 
     /**
@@ -51,7 +51,7 @@ export class BufferChain {
         let block = <DataBlock> this.blocks[index];
         if(block){
             block.data = data;
-            block.attribute = attribute;
+            block.copyValue(attribute);
         } else {
             block = new DataBlock(data, attribute);
             this.blocks[index] = block;

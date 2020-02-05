@@ -1,7 +1,7 @@
 /**
  * 事件处理器
  */
-import {Composition} from "./Composition";
+import {Composition} from "./common/Composition";
 import {Keyboard} from "./input/Keyboard";
 import {FocusTarget, Terminal} from "./Terminal";
 import {CommonUtils} from "./common/CommonUtils";
@@ -11,6 +11,7 @@ export class EventHandler {
 
     // 联想输入
     private composing: Composition = new Composition();
+
     // 键盘输入
     private keyboard: Keyboard = new Keyboard();
 
