@@ -41,6 +41,7 @@ html, body{ margin: 0; width: 100%; height: 100%; overflow: hidden; font-size: 1
 
 .webxterm .viewport{
     word-break: break-all;
+    padding: 0 4px;
 }
 
 .webxterm .viewport-row{
@@ -104,7 +105,6 @@ html, body{ margin: 0; width: 100%; height: 100%; overflow: hidden; font-size: 1
 .webxterm .composition{
     position: relative;
     border-right: 1px solid transparent;
-    animation: border-blink 1.2s linear infinite;
 }
 
 .webxterm .composition:after{

@@ -1,11 +1,13 @@
 import {Terminal} from "../Terminal";
 import {Parser} from "./Parser";
 import {DataBlock} from "./buffer/DataBlock";
-import {BufferChain} from "./buffer/BufferChain";
+import {BufferLine} from "./buffer/BufferLine";
 import {DataBlockAttribute} from "./buffer/DataBlockAttribute";
 import {CommonUtils} from "../common/CommonUtils";
 import {Preferences} from "../Preferences";
 import {Styles} from "../Styles";
+import {PlaceholderBlock} from "./buffer/PlaceholderBlock";
+import {Buffer} from "./buffer/Buffer";
 
 
 // 8-bit
@@ -62,6 +64,30 @@ export class EscapeSequenceParser {
     // 字符属性
     private _attribute: DataBlockAttribute = new DataBlockAttribute();
 
+    // 应用光标键(DECCKM)
+    // Key        Normal     Application
+    // ---------+----------+-------------
+    // Home     | CSI H    | SS3 H
+    // End      | CSI F    | SS3 F
+    // Cursor Up    | CSI A    | SS3 A
+    // Cursor Down  | CSI B    | SS3 B
+    // Cursor Right | CSI C    | SS3 C
+    // Cursor Left  | CSI D    | SS3 D
+    // Insert   | CSI 2 ~  | CSI 2 ~
+    // Delete   | CSI 3 ~  | CSI 3 ~
+    // Home     | CSI 1 ~  | CSI 1 ~
+    // End      | CSI 4 ~  | CSI 4 ~
+    // PageUp   | CSI 5 ~  | CSI 5 ~
+    // PageDown | CSI 6 ~  | CSI 6 ~
+    // ---------+----------+-------------
+    private _applicationCursorKeys: boolean = false;
+    private _normalCursorKeys: boolean = true;
+
+    // 替换字符模式
+    private _replaceMode: boolean = true;
+    // 插入字符模式
+    private _insertMode: boolean = false;
+
     constructor(terminal: Terminal, parser: Parser) {
         this.parser = parser;
         this.terminal = terminal;
@@ -75,37 +101,312 @@ export class EscapeSequenceParser {
         return this.terminal.preferences;
     }
 
-    /**
-     * 抹除数据块的内容
-     * @param block
-     * @param data
-     */
-    public eraseDataBlock(block: DataBlock, data: string = " "): void {
+    get applicationCursorKeys(): boolean {
+        return this._applicationCursorKeys;
+    }
 
-        if (!block) {
-            block = new DataBlock("", this.attribute);
-        }
+    get normalCursorKeys(): boolean {
+        return this._normalCursorKeys;
+    }
 
-        block.erase(data, this.attribute);
+    get replaceMode(): boolean {
+        return this._replaceMode;
+    }
+
+    get insertMode(): boolean {
+        return this._insertMode;
+    }
+
+    get activeBufferLine(): BufferLine {
+        return this.parser.bufferSet.activeBufferLine;
+    }
+
+    get activeBuffer(): Buffer {
+        return this.parser.bufferSet.activeBuffer;
     }
 
     /**
      * 抹除当前行
-     * @param chain
-     * @param createIfNotExists 如果不存在则创建
+     * @param line
      */
-    public eraseChainDataBlock(chain: BufferChain, createIfNotExists: boolean): void {
+    eraseLineDataBlock(line: BufferLine) {
 
-        if (createIfNotExists) {
-            const len = this.terminal.columns - chain.blockSize;
-            if (len > 0) {
-                for (let i = 0; i < len; i++) {
-                    chain.addBlankBlock();
-                }
+        for(let i = 0, len = line.blocks.length; i < len; i++){
+            let block = line.get(i);
+            if(block instanceof DataBlock){
+                // 数据块
+                block.erase(" ", this.attribute);
+            } else {
+                // PlaceholderBlock
             }
         }
+    }
 
-        chain.eraseBlock(this.attribute);
+    /**
+     *
+     * @param chr 字符
+     * @param params 参数
+     * @param prefix 前缀
+     * @param suffix 后缀
+     */
+    parse(chr: string, params: number[], prefix: string, suffix: string) {
+
+        switch (chr) {
+
+            case "@":
+                this.insertChars(params, prefix);
+                break;
+            case "A":
+                this.cursorUp(params);
+                break;
+            case "B":
+                this.cursorDown(params);
+                break;
+            case "C":
+                this.cursorForward(params);
+                break;
+            case "D":
+                this.cursorBackward(params);
+                break;
+            case "E":
+                this.cursorNextLine(params);
+                break;
+            case "F":
+                this.cursorPrecedingLine(params);
+                break;
+            case "G":
+                this.cursorPosition(undefined, params[0] || 1);
+                break;
+            case "H":
+                this.cursorPosition(params[0] || 1, params[1] || 1);
+                break;
+            case "I":
+                this.cursorForwardTabulation(params);
+                break;
+            case "J":
+                this.eraseInDisplay(params, prefix === "?");
+                break;
+            case "K":
+                this.eraseInLine(params, prefix === "?");
+                break;
+            case "L":
+                this.insertLines(params);
+                break;
+            case "M":
+                this.deleteLines(params);
+                break;
+            case "P":
+                this.deleteChars(params);
+                break;
+            case "S":
+                if (prefix === "?") {
+                    this.setOrRequestGraphicsAttr(params);
+                } else {
+                    this.scrollUpLines(params);
+                }
+                break;
+            case "T":
+                if (prefix === ">") {
+                    this.resetTitleModeFeatures(params);
+                } else if (params.length > 1) {
+                    this.initiateHighlightMouseTacking(params);
+                } else {
+                    this.scrollDownLines(params);
+                }
+                break;
+            case "X":
+                this.eraseChars(params);
+                break;
+            case "Z":
+                this.cursorBackwardTabulation(params);
+                break;
+            case "^":
+                this.scrollDownLines(params);
+                break;
+            case "`":
+                this.cursorPosition(undefined, params[0] || 1);
+                break;
+            case "a":
+                this.cursorPosition(undefined, this.parser.x + (params[0] || 1));
+                break;
+            case "b":
+                this.repeatPrecedingGraphicChars(params);
+                break;
+            case "c":
+                if (prefix === "=") {
+                    this.sendTertiaryDeviceAttrs(params);
+                } else if (prefix === ">") {
+                    this.sendSecondaryDeviceAttrs(params);
+                } else {
+                    this.sendPrimaryDeviceAttrs(params);
+                }
+                break;
+            case "d":
+                this.cursorPosition(params[0] || 1);
+                break;
+            case "e":
+                this.cursorPosition(this.parser.y + (params[0] || 1));
+                break;
+            case "f":
+                this.cursorPosition(params[0] || 1, params[1] || 1);
+                break;
+            case "g":
+                this.tabClear(params);
+                break;
+            case "h":
+                this.setMode(params, prefix === "?");
+                break;
+            case "i":
+                this.mediaCopy(params, prefix === "?");
+                break;
+            case "l":
+                this.resetMode(params, prefix === "?");
+                break;
+            case "m":
+                if (prefix === ">") {
+                    this.updateKeyModifierOptions(params);
+                } else {
+                    this.charAttrs(params);
+                }
+                break;
+            case "n":
+                if (prefix === ">") {
+                    this.disableKeyModifierOptions(params);
+                    break;
+                }
+                this.deviceStatusReport(params, prefix === "?");
+                break;
+            case "p":
+                if (prefix === ">") {
+                    this.setPointerMode(params);
+                } else if (prefix === "!") {
+                    this.resetSoftTerminal();
+                } else if (suffix === "\"") {
+                    this.setConformanceLevel(params);
+                } else if (suffix === "$") {
+                    this.requestANSIMode(params, prefix === "?");
+                } else if (prefix === "#") {
+                    this.pushVideoAttrsOntoStack(params);
+                } else if (suffix === "#") {
+                    this.pushVideoAttrsOntoStack(params);
+                }
+                break;
+            case "q":
+                if (prefix === "#") {
+                    this.popVideoAttrsFromStack();
+                } else if (suffix === "\"") {
+                    this.selectCharProtectionAttr(params);
+                } else if (suffix === " ") {
+                    this.setCursorStyle(params);
+                } else {
+                    this.loadLeds(params);
+                }
+                break;
+            case "r":
+                if (prefix === "?") {
+                    this.restoreDECPrivateMode(params);
+                } else if (suffix === "$") {
+                    this.changeAttrsInRectangularArea(params);
+                } else {
+                    this.setScrollingRegion(params);
+                }
+                break;
+            case "s":
+                if (prefix === "?") {
+                    this.saveDECPrivateMode(params);
+                } else if (params.length > 1) {
+                    this.setMargins(params);
+                } else {
+                    this.parser.saveCursor();
+                }
+                break;
+            case "t":
+                if (prefix === ">") {
+                    this.setTitleModeFeatures(params);
+                } else if (suffix === " ") {
+                    this.setWarningBellVolume(params);
+                } else if (suffix === "$") {
+                    this.reverseAttrsInRectArea(params);
+                } else {
+                    this.windowManipulation(params);
+                }
+                break;
+            case "u":
+                if (suffix === " ") {
+                    this.setWarningBellVolume(params);
+                } else {
+                    this.parser.restoreCursor();
+                }
+                break;
+            case "v":
+                if (suffix === "$") {
+                    this.copyRectangularArea(params);
+                }
+                break;
+            case "w":
+                if (suffix === "$") {
+                    this.requestPresentationStateReport(params);
+                } else if (suffix === "\"") {
+                    this.enableFilterRectangle(params);
+                }
+                break;
+            case "x":
+                if (suffix === "*") {
+                    this.selectAttrChangeExtent(params);
+                } else if (suffix === "$") {
+                    this.fillRectArea(params);
+                }
+                break;
+            case "y":
+                if (suffix === "#") {
+                    this.selectChecksumExtension(params);
+                } else if (suffix === "*") {
+                    this.requestRectAreaChecksum(params);
+                }
+                break;
+            case "z":
+                if (suffix === "'") {
+                    this.enableLocatorReporting(params);
+                } else if (suffix === "$") {
+                    this.eraseRectArea(params);
+                }
+                break;
+            case "{":
+                if (suffix === "'") {
+                    this.selectLocatorEvents(params);
+                } else if (prefix === "#") {
+                    this.pushVideoAttrsOntoStack(params);
+                } else if (suffix === "#") {
+                    this.pushVideoAttrsOntoStack(params);
+                } else if (suffix === "$") {
+                    this.selectEraseRectArea(params);
+                }
+                break;
+            case "|":
+                if (suffix === "#") {
+                    this.reportSelectedGraphicRendition(params);
+                } else if (suffix === "$") {
+                    this.selectColumnsPerPage(params);
+                } else if (suffix === "'") {
+                    this.requestLocatorPosition(params);
+                } else if (suffix === "*") {
+                    this.selectNumberOfLinesPerScreen(params);
+                }
+                break;
+            case "}":
+                if (prefix === "#") {
+                    this.popVideoAttrsFromStack();
+                } else if (suffix === "'") {
+                    this.insertChars(params);
+                }
+                break;
+            case "~":
+                if (suffix === "'") {
+                    this.deleteChars(params);
+                }
+                break;
+
+        }
 
     }
 
@@ -118,13 +419,14 @@ export class EscapeSequenceParser {
     //
     // CSI Ps SP @
     //           Shift left Ps columns(s) (default = 1) (SL), ECMA-48.
-    public insertChars(params: number[], prefix: string = ""): void {
+    insertChars(params: number[], prefix: string = "") {
 
         if (prefix === " ") {
 
         } else {
             for (let i = 0, ps = params[0] || 1; i < ps; i++) {
-                this.parser.hotChain.addBlankBlock(this.parser.x++);
+                this.activeBufferLine.insert(this.parser.x, DataBlock.newBlock(" ", this.attribute));
+                this.parser.x++;
             }
         }
 
@@ -139,7 +441,7 @@ export class EscapeSequenceParser {
     //
     // CSI Ps SP A
     //           Shift right Ps columns(s) (default = 1) (SR), ECMA-48.
-    public cursorUp(params: number[], suffix: string = ""): void {
+    cursorUp(params: number[], suffix: string = "") {
         if (!!suffix) {
 
         } else {
@@ -155,7 +457,7 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps B  Cursor Down Ps Times (default = 1) (CUD).
-    public cursorDown(params: number[]): void {
+    cursorDown(params: number[]) {
         this.parser.y += params[0] || 1;
         if (this.parser.y > this.terminal.rows) {
             this.parser.y = this.terminal.rows;
@@ -167,12 +469,12 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps C  Cursor Forward Ps Times (default = 1) (CUF).
-    public cursorForward(params: number[]): void {
+    cursorForward(params: number[]) {
         const ps = params[0] || 1;
-        for (let i = 0; i < ps; i++) {
-            // 如果右移的时候，出现 block = undefined 的话，则需要填充、
-            this.parser.hotChain.addBlockIfNotExists(" ", this.attribute, this.parser.x + i);
-        }
+        // for (let i = 0; i < ps; i++) {
+        //     // 如果右移的时候，出现 block = undefined 的话，则需要填充、
+        //     this.parser.buffer.get(this.parser.y).addBlockIfNotExists(" ", this.attribute, this.parser.x + i);
+        // }
         this.parser.x += ps;
     }
 
@@ -181,7 +483,7 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps D  Cursor Backward Ps Times (default = 1) (CUB).
-    public cursorBackward(params: number[]): void {
+    cursorBackward(params: number[]) {
         this.parser.x -= params[0] || 1;
     }
 
@@ -190,7 +492,7 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps E  Cursor Next Line Ps Times (default = 1) (CNL).
-    public cursorNextLine(params: number[]): void {
+    cursorNextLine(params: number[]) {
         this.cursorDown(params);
     }
 
@@ -199,7 +501,7 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps F  Cursor Preceding Line Ps Times (default = 1) (CPL).
-    public cursorPrecedingLine(params: number[]): void {
+    cursorPrecedingLine(params: number[]) {
         this.cursorUp(params);
     }
 
@@ -223,7 +525,7 @@ export class EscapeSequenceParser {
     // CSI Ps ; Ps f
     //           Horizontal and Vertical Position [row;column] (default =
     //           [1,1]) (HVP).
-    public cursorPosition(rows: number = 0, cols: number = 0): void {
+    cursorPosition(rows: number = 0, cols: number = 0) {
 
         if (rows !== 0) {
             this.parser.y = rows;
@@ -239,10 +541,12 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps I  Cursor Forward Tabulation Ps tab stops (default = 1) (CHT).
-    public cursorForwardTabulation(params: number[]): void {
+    cursorForwardTabulation(params: number[]) {
 
         for (let i = 0; i < params[0] || 1; i++) {
-            this.parser.hotChain.addOrUpdateBlock("\t", this.attribute, this.parser.x++);
+            this.activeBufferLine.replace(this.parser.x, DataBlock.newBlock("\t", this.attribute));
+            // this.parser.buffer.get(this.parser.y).addOrUpdateBlock("\t", this.attribute, this.parser.x++);
+            this.parser.x++;
         }
     }
 
@@ -263,49 +567,76 @@ export class EscapeSequenceParser {
     //             Ps = 1  ⇒  Selective Erase Above.
     //             Ps = 2  ⇒  Selective Erase All.
     //             Ps = 3  ⇒  Selective Erase Saved Lines, xterm.
-    public eraseInDisplay(params: number[], isDECS: boolean): void {
+    eraseInDisplay(params: number[], isDECS: boolean) {
 
-        let beginIndex: number = 0,
-            end: number = 0,
-            scrollBack: boolean = false;
+        let begin: number = 1,
+            end: number,
+            scrollBack: boolean = false,
+            fragment: DocumentFragment = document.createDocumentFragment();
         switch (params[0]) {
             case 1:
-                end = this.parser.y - 1;
+                end = this.parser.y;
                 break;
             case 2:
-                end = this.terminal.rows - 1;
+                end = this.terminal.rows;
                 break;
             case 3:
+                // https://en.wikipedia.org/wiki/ANSI_escape_code
+                // Terminal output sequences
+                //
+                end = this.terminal.rows;
+
+                // If n is 3, clear entire screen and delete all lines saved in the scrollback buffer
+                // (this feature was added for xterm and is supported by other terminal applications).
+                this.parser.bufferSet.clearSavedLines();
                 break;
             default:
-                beginIndex = this.parser.y - 1;
-                end = this.terminal.rows - 1;
+                begin = this.parser.y;
+                end = this.terminal.rows;
                 break;
         }
 
-        if (beginIndex === 0 && end === this.terminal.rows) {
+        if (begin === 1 && end === this.terminal.rows) {
             // 如果是全屏的话，那就滚动。
-            scrollBack = !this.parser.isAlternate;
+            // 如果是默认缓冲区的话，就滚动。
+            scrollBack = this.parser.bufferSet.isNormal;
+
+            // 检查是否有空行
+            // for(let i = 0, len = this.activeBuffer.lines.length; i < len; i++){
+            //     let line = this.activeBuffer.lines[i];
+            //     if(!line.element.getAttribute("used")){
+            //         line.element.remove();
+            //     }
+            // }
+
         }
 
-        for (let i = beginIndex; i < end; i++) {
+        for (let i = begin; i <= end; i++) {
             if (scrollBack) {
-                this.parser.newBufferChain();
+                // 删除第一行
+                const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, scrollBack);
+                for(let savedLine of savedLines){
+                    this.terminal.printer.printLine(savedLine, false);
+                }
+
+                // 底部添加行
+                let line = this.activeBuffer.getBlankLine();
+                this.activeBuffer.append(line);
+                fragment.appendChild(line.element);
+
             } else {
                 // 判断行是否存在
-                const chains = this.parser.getBuffer().getChains();
-                if (chains[i]) {
-                    // 删除数据
-                    chains[i].flush("");
-                } else {
-                    continue;
-                }
+                const line = this.activeBuffer.get(i);
+                // 删除数据
+                line.dirty = true;
+                // 抹除当前行，抹除当前链数据
+                line.erase(this.attribute);
+
             }
 
-            // 抹除当前行，抹除当前链数据
-            const chain = this.parser.getBuffer().getChains()[i];
-            this.eraseChainDataBlock(chain, true);
         }
+
+        if(scrollBack) this.parser.viewport.appendChild(fragment);
     }
 
     /**
@@ -323,30 +654,35 @@ export class EscapeSequenceParser {
     //             Ps = 0  ⇒  Selective Erase to Right (default).
     //             Ps = 1  ⇒  Selective Erase to Left.
     //             Ps = 2  ⇒  Selective Erase All.
-    public eraseInLine(params: number[], isDECS: boolean): void {
+    eraseInLine(params: number[], isDECS: boolean) {
 
-        let index: number,
+        let begin: number = 1,
             end: number,
-            blockSize: number = this.parser.hotChain.blockSize;
+            blockSize: number = this.activeBufferLine.blocks.length;
         switch (params[0]) {
             case 1:
-                index = 1;
                 end = this.parser.x;
                 break;
             case 2:
-                index = 1;
                 end = blockSize;
                 break;
             default:
-                index = this.parser.x;
+                begin = this.parser.x;
                 end = blockSize;
                 break;
         }
 
-        for (let i = index, block; i < end; i++) {
-            block = this.parser.hotChain.getDataBlock(i);
-            this.eraseDataBlock(block);
+        for (let i = begin, block; i <= end; i++) {
+
+            block = this.activeBufferLine.get(i);
+            if(block instanceof DataBlock){
+                block.erase(" ", this.attribute);
+            }
+
         }
+
+        // 设置为脏链
+        this.activeBufferLine.dirty = true;
     }
 
     /**
@@ -354,7 +690,7 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps L  Insert Ps Line(s) (default = 1) (IL).
-    public insertLines(params: number[]): void {
+    insertLines(params: number[]) {
 
         console.info('insertLines..', params);
 
@@ -370,7 +706,7 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps M  Delete Ps Line(s) (default = 1) (DL).
-    public deleteLines(params: number[]): void {
+    deleteLines(params: number[]) {
 
         //
         console.info('deleteLines..', params);
@@ -387,9 +723,10 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps P  Delete Ps Character(s) (default = 1) (DCH).
-    public deleteChars(params: number[]): void {
+    deleteChars(params: number[]) {
         console.info('deleteChars.params' + JSON.stringify(params));
-        const deleted = this.parser.hotChain.removeBlock2(this.parser.x, params[0] || 1);
+        const deleted = this.activeBufferLine.delete(this.parser.x, params[0] || 1);
+        // const deleted = this.parser.buffer.get(this.parser.y).removeBlock2(this.parser.x, params[0] || 1);
         console.info('P.deleted', deleted);
     }
 
@@ -440,7 +777,7 @@ export class EscapeSequenceParser {
     //           o   While resizing a window will always change the current
     //               graphics geometry, the reverse is not true.  Setting
     //               graphics geometry does not affect the window size.
-    public setOrRequestGraphicsAttr(params: number[]): void {
+    setOrRequestGraphicsAttr(params: number[]) {
         let [pi, pa, pv] = params;
         console.info(`setOrRequestGraphicsAttr, pi=${pi}, pa=${pa}, pv=${pv}`);
     }
@@ -450,9 +787,11 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps S  Scroll up Ps lines (default = 1) (SU), VT420, ECMA-48.
-    public scrollUpLines(params: number[]): void {
+    scrollUpLines(params: number[]) {
         console.info("scrollUpLines", params);
-        this.parser.scrollUp(params[0] || 1, true);
+        for(let i = 0; i < params[0] || 1; i++){
+            this.parser.scrollUp();
+        }
     }
 
     /**
@@ -469,7 +808,7 @@ export class EscapeSequenceParser {
     //             Ps = 2  ⇒  Do not set window/icon labels using UTF-8.
     //             Ps = 3  ⇒  Do not query window/icon labels using UTF-8.
     //           (See discussion of Title Modes).
-    public resetTitleModeFeatures(params: number[]): void {
+    resetTitleModeFeatures(params: number[]) {
 
     }
 
@@ -482,7 +821,7 @@ export class EscapeSequenceParser {
     //           [func;startx;starty;firstrow;lastrow].  See the section Mouse
     //           Tracking.
     //
-    public initiateHighlightMouseTacking(params: number[]): void {
+    initiateHighlightMouseTacking(params: number[]) {
         let [func, startX, startY, firstRow, lastRow] = params;
         console.info(
             `initiateHighlightMouseTacking, func=${func}, startX=${startX}, startY=${startY}, firstRow=${firstRow}, lastRow=${lastRow}`);
@@ -494,9 +833,16 @@ export class EscapeSequenceParser {
      */
     // CSI Ps T  Scroll down Ps lines (default = 1) (SD), VT420.
     // CSI Ps ^  Scroll down Ps lines (default = 1) (SD), ECMA-48.
-    public scrollDownLines(params: number[]) {
+
+    // SD causes the data in the presentation component to be moved by n line positions
+    // if the line orientation is horizontal, or by n character positions if the line
+    // orientation is vertical, such that the data appear to move down; where n equals the value of Pn.
+    scrollDownLines(params: number[]) {
         console.info("scrollDownLines:", params);
-        this.parser.scrollDown(params[0] || 1, true);
+        for(let i = 0; i < (params[0] || 1); i++){
+            this.parser.scrollDown();
+        }
+
     }
 
     /**
@@ -504,10 +850,15 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps X  Erase Ps Character(s) (default = 1) (ECH).
-    public eraseChars(params: number[]): void {
+    eraseChars(params: number[]) {
 
         for (let i = this.parser.x; i < params[0] || 1; i++) {
-            this.eraseDataBlock(this.parser.hotChain.getDataBlock(i));
+            let block = this.activeBufferLine.get(this.parser.x);
+            if(block instanceof DataBlock){
+                block.erase(" ", this.attribute);
+            }
+            // 设置为脏链
+            this.activeBufferLine.dirty = true;
         }
 
     }
@@ -517,7 +868,7 @@ export class EscapeSequenceParser {
      * @param params
      */
     // CSI Ps Z  Cursor Backward Tabulation Ps tab stops (default = 1) (CBT).
-    public cursorBackwardTabulation(params: number[]): void {
+    cursorBackwardTabulation(params: number[]) {
 
     }
 
@@ -539,7 +890,7 @@ export class EscapeSequenceParser {
     //             Ps = 0  ⇒  report Terminal Unit ID (default), VT400.  XTerm
     //           uses zeros for the site code and serial number in its DECRPTUI
     //           response.
-    public sendTertiaryDeviceAttrs(params: number[]): void {
+    sendTertiaryDeviceAttrs(params: number[]) {
 
     }
 
@@ -570,7 +921,7 @@ export class EscapeSequenceParser {
     //           the XFree86 patch number, starting with 95).  In a DEC termi-
     //           nal, Pc indicates the ROM cartridge registration number and is
     //           always zero.
-    public sendSecondaryDeviceAttrs(params: number[]): void {
+    sendSecondaryDeviceAttrs(params: number[]) {
 
     }
 
@@ -614,7 +965,7 @@ export class EscapeSequenceParser {
     //           trols (DECSNLS, DECSCPP, DECSLPP) to adjust its visible win-
     //           dow's size.  The "cursor coupling" controls (DECHCCM, DECPCCM,
     //           DECVCCM) are ignored.
-    public sendPrimaryDeviceAttrs(params: number[]): void {
+    sendPrimaryDeviceAttrs(params: number[]) {
 
     }
 
@@ -627,7 +978,7 @@ export class EscapeSequenceParser {
     //             Ps = 3  ⇒  Clear All.
     // Ecma-048
     // 8.3.154 TBC - TABULATION CLEAR
-    public tabClear(params: number[]): void {
+    tabClear(params: number[]) {
 
         switch (params[0]) {
             case 1:
@@ -694,7 +1045,7 @@ export class EscapeSequenceParser {
     //             Ps = 4 5  ⇒  Reverse-wraparound Mode, xterm.
     //             Ps = 4 6  ⇒  Start Logging, xterm.  This is normally dis-
     //           abled by a compile-time option.
-    //             Ps = 4 7  ⇒  Use Alternate Screen Buffer, xterm.  This may
+    //             Ps = 4 7  ⇒  Use Alternate Screen BufferSet, xterm.  This may
     //           be disabled by the titeInhibit resource.
     //             Ps = 6 6  ⇒  Application keypad (DECNKM), VT320.
     //             Ps = 6 7  ⇒  Backarrow key sends backspace (DECBKM), VT340,
@@ -745,14 +1096,14 @@ export class EscapeSequenceParser {
     //             Ps = 1 0 4 4  ⇒  Reuse the most recent data copied to CLIP-
     //           BOARD, xterm.  This enables the keepClipboard resource.
     //             Ps = 1 0 4 6  ⇒  Enable switching to/from Alternate Screen
-    //           Buffer, xterm.  This works for terminfo-based systems, updat-
+    //           BufferSet, xterm.  This works for terminfo-based systems, updat-
     //           ing the titeInhibit resource.
-    //             Ps = 1 0 4 7  ⇒  Use Alternate Screen Buffer, xterm.  This
+    //             Ps = 1 0 4 7  ⇒  Use Alternate Screen BufferSet, xterm.  This
     //           may be disabled by the titeInhibit resource.
     //             Ps = 1 0 4 8  ⇒  Save cursor as in DECSC, xterm.  This may
     //           be disabled by the titeInhibit resource.
     //             Ps = 1 0 4 9  ⇒  Save cursor as in DECSC, xterm.  After sav-
-    //           ing the cursor, switch to the Alternate Screen Buffer, clear-
+    //           ing the cursor, switch to the Alternate Screen BufferSet, clear-
     //           ing it first.  This may be disabled by the titeInhibit
     //           resource.  This control combines the effects of the 1 0 4 7
     //           and 1 0 4 8  modes.  Use this with terminfo-based applications
@@ -766,7 +1117,7 @@ export class EscapeSequenceParser {
     //           xterm.
     //             Ps = 1 0 6 1  ⇒  Set VT220 keyboard emulation, xterm.
     //             Ps = 2 0 0 4  ⇒  Set bracketed paste mode, xterm.
-    public setMode(params: number[] | number, isDEC: boolean): void {
+    setMode(params: number[] | number, isDEC: boolean) {
         if (typeof params === 'object') {
             let len = params.length,
                 i = 0;
@@ -781,7 +1132,8 @@ export class EscapeSequenceParser {
             switch (params) {
 
                 case 1:
-                    // this.applicationCursor = true;
+                    this._applicationCursorKeys = true;
+                    this._normalCursorKeys = false;
                     break;
                 case 2:
                     // this.p.setGCharset(0, this.t.charsets.US);
@@ -820,10 +1172,10 @@ export class EscapeSequenceParser {
                 case 10:
                     break;
                 case 12:
-                case 13:
                     // Start Blinking Cursor (AT&T 610).
+                case 13:
                     // Start Blinking Cursor (set only via resource or menu).
-                    // this.t.startBlinkingCursor();
+                    this.terminal.cursor.blinking = true;
                     break;
                 case 14:
                 case 18:
@@ -833,8 +1185,8 @@ export class EscapeSequenceParser {
                     break;
                 case 25:
                     // show cursor
-                    // console.info('show cursor....25h');
-                    this.terminal.showCursor();
+                    console.info('show cursor....25h');
+                    this.terminal.cursor.show = true;
                     break;
                 case 30:
                     // this.showScrollbar = true;
@@ -945,7 +1297,7 @@ export class EscapeSequenceParser {
                     // this.p.disableAlternateBuffer = false;
                     break;
                 case 1047:
-                    this.parser.switch2Buffer2();
+                    this.parser.activateAltBuffer();
                     // this.titeInhibit = true;
                     break;
                 case 1048:
@@ -953,7 +1305,12 @@ export class EscapeSequenceParser {
                     // this.titeInhibit = false;
                     break;
                 case 1049:
-                    this.parser.saveCursor().switch2Buffer2();
+                    // Save cursor as in DECSC, xterm.
+                    // After saving the cursor, switch to the Alternate Screen BufferSet, clearing it first.
+
+                    this.parser.saveCursor();
+                    this.parser.activateAltBuffer();
+
                     // this.titeInhibit = false;
                     break;
                 case 1050:
@@ -986,6 +1343,9 @@ export class EscapeSequenceParser {
                 case 2:
                     break;
                 case 4:
+                    // Insert Mode (IRM).
+                    this._insertMode = true;
+                    this._replaceMode = false;
                     break;
                 case 12:
                     break;
@@ -1015,7 +1375,7 @@ export class EscapeSequenceParser {
     //             Ps = 5  ⇒  Turn on printer controller mode.
     //             Ps = 1 0  ⇒  HTML screen dump, xterm.
     //             Ps = 1 1  ⇒  SVG screen dump, xterm.
-    public mediaCopy(params: number[], isDEC: boolean): void {
+    mediaCopy(params: number[], isDEC: boolean) {
 
     }
 
@@ -1060,7 +1420,7 @@ export class EscapeSequenceParser {
     //             Ps = 4 5  ⇒  No Reverse-wraparound Mode, xterm.
     //             Ps = 4 6  ⇒  Stop Logging, xterm.  This is normally disabled
     //           by a compile-time option.
-    //             Ps = 4 7  ⇒  Use Normal Screen Buffer, xterm.
+    //             Ps = 4 7  ⇒  Use Normal Screen BufferSet, xterm.
     //             Ps = 6 6  ⇒  Numeric keypad (DECNKM), VT320.
     //             Ps = 6 7  ⇒  Backarrow key sends delete (DECBKM), VT340,
     //           VT420.  This sets the backarrowKey resource to "false".
@@ -1106,16 +1466,16 @@ export class EscapeSequenceParser {
     //             Ps = 1 0 4 3  ⇒  Disable raising of the window when Control-
     //           G is received, xterm.  This disables the popOnBell resource.
     //             Ps = 1 0 4 6  ⇒  Disable switching to/from Alternate Screen
-    //           Buffer, xterm.  This works for terminfo-based systems, updat-
+    //           BufferSet, xterm.  This works for terminfo-based systems, updat-
     //           ing the titeInhibit resource.  If currently using the Alter-
-    //           nate Screen Buffer, xterm switches to the Normal Screen Buf-
+    //           nate Screen BufferSet, xterm switches to the Normal Screen Buf-
     //           fer.
-    //             Ps = 1 0 4 7  ⇒  Use Normal Screen Buffer, xterm.  Clear the
-    //           screen first if in the Alternate Screen Buffer.  This may be
+    //             Ps = 1 0 4 7  ⇒  Use Normal Screen BufferSet, xterm.  Clear the
+    //           screen first if in the Alternate Screen BufferSet.  This may be
     //           disabled by the titeInhibit resource.
     //             Ps = 1 0 4 8  ⇒  Restore cursor as in DECRC, xterm.  This
     //           may be disabled by the titeInhibit resource.
-    //             Ps = 1 0 4 9  ⇒  Use Normal Screen Buffer and restore cursor
+    //             Ps = 1 0 4 9  ⇒  Use Normal Screen BufferSet and restore cursor
     //           as in DECRC, xterm.  This may be disabled by the titeInhibit
     //           resource.  This combines the effects of the 1 0 4 7  and 1 0 4
     //           8  modes.  Use this with terminfo-based applications rather
@@ -1130,14 +1490,14 @@ export class EscapeSequenceParser {
     //             Ps = 1 0 6 1  ⇒  Reset keyboard emulation to Sun/PC style,
     //           xterm.
     //             Ps = 2 0 0 4  ⇒  Reset bracketed paste mode, xterm.
-    public resetMode(params: number[] | number, isDEC: boolean) {
+    resetMode(params: number[] | number, isDEC: boolean) {
 
         if (typeof params === 'object') {
             let len = params.length,
                 i = 0;
 
             for (; i < len; i++) {
-                this.setMode(params[i], isDEC);
+                this.resetMode(params[i], isDEC);
             }
         }
 
@@ -1146,15 +1506,19 @@ export class EscapeSequenceParser {
             switch (params) {
 
                 case 1:
-                    // this.applicationCursor = true;
+                    // Normal Cursor Keys (DECCKM), VT100.
+                    this._applicationCursorKeys = false;
+                    this._normalCursorKeys = true;
                     break;
                 case 2:
+                    // Designate VT52 mode (DECANM), VT100.
                     // this.p.setGCharset(0, this.t.charsets.US);
                     // this.p.setGCharset(1, this.t.charsets.US);
                     // this.p.setGCharset(2, this.t.charsets.US);
                     // this.p.setGCharset(3, this.t.charsets.US);
                     break;
                 case 3:
+                    // Jump (Fast) Scroll (DECSCLM), VT100.
                     // this.t.onResize({
                     //     columns: 132,
                     //     rows: this.t.rows
@@ -1163,32 +1527,33 @@ export class EscapeSequenceParser {
                 case 4:
                     break;
                 case 5:
-                    // Reverse Video (DECSCNM), VT100.
+                    // Normal Video (DECSCNM), VT100.
                     this.terminal.normalVideo();
                     break;
                 case 6:
-                    // 光标原点模式
+                    // Normal Cursor Mode (DECOM), VT100.
                     // this.originMode = true;
                     break;
                 case 7:
-                    // 自动换行
+                    // No Auto-wrap Mode (DECAWM), VT100.
                     // this.autoWrap = true;
                     break;
                 case 8:
-                    // this.autoRepeatKeys = true;
+                    // No Auto-repeat Keys (DECARM), VT100.
                     break;
                 case 9:
-                    //
+                    // Don't send Mouse X & Y on button press, xterm.
                     // this.x10Mouse = true;
                     // this.mouseEvents = true;
                     break;
                 case 10:
+                    // Hide toolbar (rxvt).
                     break;
                 case 12:
-                case 13:
                     // Start Blinking Cursor (AT&T 610).
+                case 13:
                     // Start Blinking Cursor (set only via resource or menu).
-                    // this.t.startBlinkingCursor();
+                    this.terminal.cursor.blinking = false;
                     break;
                 case 14:
                 case 18:
@@ -1198,8 +1563,8 @@ export class EscapeSequenceParser {
                     break;
                 case 25:
                     // hide cursor
-                    // console.info('hide cursor....25l');
-                    this.terminal.hideCursor();
+                    console.info('hide cursor....25l');
+                    this.terminal.cursor.show = false;
                     break;
                 case 30:
                     // this.showScrollbar = true;
@@ -1225,7 +1590,7 @@ export class EscapeSequenceParser {
                     // this.startLogging = true;
                     break;
                 case 47:
-                    this.parser.resetBuffer();
+                    this.parser.activateNormalBuffer();
                     break;
                 case 66:
                     // this.t.applicationKeypad = true;
@@ -1312,7 +1677,7 @@ export class EscapeSequenceParser {
                     // 清除备用缓冲区
                     this.eraseInDisplay([2], false);
                     // 切换到默认缓冲区
-                    this.parser.resetBuffer();
+                    this.parser.activateNormalBuffer();
                     // this.titeInhibit = false;
                     break;
                 case 1048:
@@ -1321,7 +1686,8 @@ export class EscapeSequenceParser {
                     break;
                 case 1049:
                     // 切换到默认缓冲区&恢复光标
-                    this.parser.resetBuffer().restoreCursor();
+                    this.parser.activateNormalBuffer();
+                    this.parser.restoreCursor();
                     // this.titeInhibit = false;
                     break;
                 case 1050:
@@ -1354,6 +1720,9 @@ export class EscapeSequenceParser {
                 case 2:
                     break;
                 case 4:
+                    // Replace Mode (IRM).
+                    this._insertMode = false;
+                    this._replaceMode = true;
                     break;
                 case 12:
                     break;
@@ -1391,7 +1760,7 @@ export class EscapeSequenceParser {
     //
     //           If no parameters are given, all resources are reset to their
     //           initial values.
-    public updateKeyModifierOptions(params: number[]): void {
+    updateKeyModifierOptions(params: number[]) {
 
     }
 
@@ -1531,7 +1900,7 @@ export class EscapeSequenceParser {
 
     // (SGR parameters) https://en.wikipedia.org/wiki/ANSI_escape_code
     // (8.3.117) http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-048.pdf
-    public charAttrs(params: number[] | number): void {
+    charAttrs(params: number[] | number) {
 
         if (typeof params === 'object') {
 
@@ -1552,17 +1921,17 @@ export class EscapeSequenceParser {
                     if (this.customColorMode === 38) {
                         // 38;5;2m
                         // 38;2;100;100;100m
-                        this.attribute.color = "color_" + name;
+                        this.attribute.colorClass = "color_" + name;
 
-                        Styles.add("." + this.attribute.color, {
+                        Styles.add("." + this.attribute.colorClass, {
                             color: color,
                         }, this.terminal.instanceId);
 
                         // 选择颜色
                         Styles.add([
-                            "." + this.attribute.color + "::selection",
-                            "." + this.attribute.color + "::-moz-selection",
-                            "." + this.attribute.color + "::-webkit-selection"], {
+                            "." + this.attribute.colorClass + "::selection",
+                            "." + this.attribute.colorClass + "::-moz-selection",
+                            "." + this.attribute.colorClass + "::-webkit-selection"], {
                             color: this.preferences.backgroundColor,
                             "background-color": color
                         }, this.terminal.instanceId);
@@ -1571,17 +1940,17 @@ export class EscapeSequenceParser {
                     } else if (this.customColorMode === 48) {
                         // 48;5;2m
                         // 48;2;100;100;100m
-                        this.attribute.backgroundColor = "_color_" + name;
+                        this.attribute.backgroundColorClass = "_color_" + name;
 
-                        Styles.add("." + this.attribute.backgroundColor, {
+                        Styles.add("." + this.attribute.backgroundColorClass, {
                             "background-color": color,
                         }, this.terminal.instanceId);
 
                         // 选择颜色
                         Styles.add([
-                            "." + this.attribute.backgroundColor + "::selection",
-                            "." + this.attribute.backgroundColor + "::-moz-selection",
-                            "." + this.attribute.backgroundColor + "::-webkit-selection"], {
+                            "." + this.attribute.backgroundColorClass + "::selection",
+                            "." + this.attribute.backgroundColorClass + "::-moz-selection",
+                            "." + this.attribute.backgroundColorClass + "::-webkit-selection"], {
                             color: color,
                             "background-color": this.preferences.color
                         }, this.terminal.instanceId);
@@ -1597,7 +1966,7 @@ export class EscapeSequenceParser {
 
         }
 
-        if(typeof params !== "number") return;
+        if (typeof params !== "number") return;
 
         switch (params) {
             case 0:
@@ -1607,10 +1976,10 @@ export class EscapeSequenceParser {
             case 1:
                 this._attribute.bold = true;
                 // 加粗高亮配置
-                if(this.preferences.showBoldTextInBrightColor){
-                    if(!!this.attribute.color){
-                        const index = Preferences.paletteColorNames.indexOf(this.attribute.color);
-                        this.attribute.color = Preferences.paletteColorNames[index + 8];
+                if (this.preferences.showBoldTextInBrightColor) {
+                    if (!!this.attribute.colorClass) {
+                        const index = Preferences.paletteColorNames.indexOf(this.attribute.colorClass);
+                        this.attribute.colorClass = Preferences.paletteColorNames[index + 8];
                     }
                 }
                 break;
@@ -1694,13 +2063,13 @@ export class EscapeSequenceParser {
                 // (8.3.117) http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-048.pdf
 
                 let num = 0, colorName;
-                if(30 <= params && params <= 37){
+                if (30 <= params && params <= 37) {
                     num = 30;
-                } else if(90 <= params && params <= 97){
+                } else if (90 <= params && params <= 97) {
                     num = 90;
-                } else if(40 <= params && params <= 47){
+                } else if (40 <= params && params <= 47) {
                     num = 40;
-                } else if(100 <= params && params <= 107){
+                } else if (100 <= params && params <= 107) {
                     num = 100;
                 }
 
@@ -1709,21 +2078,21 @@ export class EscapeSequenceParser {
                     case 90:
                         // 高亮字体颜色
                         // 以亮色显示粗体文本
-                        if(num === 90 || (this.attribute.bold && this.preferences.showBoldTextInBrightColor)){
+                        if (num === 90 || (this.attribute.bold && this.preferences.showBoldTextInBrightColor)) {
                             colorName = Preferences.paletteColorNames[params - num + 8];
                         } else {
                             colorName = Preferences.paletteColorNames[params - num];
                         }
-                        this.attribute.color = colorName;
+                        this.attribute.colorClass = colorName;
                         break;
                     case 40:
                         // 背景颜色
-                        this.attribute.backgroundColor =  "_" + Preferences.paletteColorNames[params - num];
+                        this.attribute.backgroundColorClass = "_" + Preferences.paletteColorNames[params - num];
                         break;
                     case 100:
                         // 背景颜色
                         // 高亮字体颜色
-                        this.attribute.backgroundColor =  "_" + Preferences.paletteColorNames[params - num + 8];
+                        this.attribute.backgroundColorClass = "_" + Preferences.paletteColorNames[params - num + 8];
                         break;
                     default:
                         // 0
@@ -1734,144 +2103,821 @@ export class EscapeSequenceParser {
         }
     }
 
+    /**
+     * 禁用修饰键的选项
+     * @param params
+     */
+    // CSI > Pm n
+    //           Disable key modifier options, xterm.  These modifiers may be
+    //           enabled via the CSI > Pm m sequence.  This control sequence
+    //           corresponds to a resource value of "-1", which cannot be set
+    //           with the other sequence.
+    //
+    //           The parameter identifies the resource to be disabled:
+    //
+    //             Ps = 0  ⇒  modifyKeyboard.
+    //             Ps = 1  ⇒  modifyCursorKeys.
+    //             Ps = 2  ⇒  modifyFunctionKeys.
+    //             Ps = 4  ⇒  modifyOtherKeys.
+    //
+    //           If the parameter is omitted, modifyFunctionKeys is disabled.
+    //           When modifyFunctionKeys is disabled, xterm uses the modifier
+    //           keys to make an extended sequence of function keys rather than
+    //           adding a parameter to each function key to denote the modi-
+    //           fiers.
     disableKeyModifierOptions(params: number[]) {
 
     }
 
-    deviceStatusReport(params: number[], b: boolean) {
+    /**
+     * 设备状态报告
+     * @param params
+     * @param isDEC
+     */
+    // CSI ? Ps n
+    //           Device Status Report (DSR, DEC-specific).
+    //             Ps = 6  ⇒  Report Cursor Position (DECXCPR).  The response
+    //           [row;column] is returned as
+    //           CSI ? r ; c R
+    //           (assumes the default page, i.e., "1").
+    //             Ps = 1 5  ⇒  Report Printer status.  The response is
+    //           CSI ? 1 0 n  (ready).  or
+    //           CSI ? 1 1 n  (not ready).
+    //             Ps = 2 5  ⇒  Report UDK status.  The response is
+    //           CSI ? 2 0 n  (unlocked)
+    //           or
+    //           CSI ? 2 1 n  (locked).
+    //             Ps = 2 6  ⇒  Report Keyboard status.  The response is
+    //           CSI ? 2 7 ; 1 ; 0 ; 0 n  (North American).
+    //
+    //           The last two parameters apply to VT300 & up (keyboard ready)
+    //           and VT400 & up (LK01) respectively.
+    //
+    //             Ps = 5 3  ⇒  Report Locator status.  The response is CSI ? 5
+    //           3 n  Locator available, if compiled-in, or CSI ? 5 0 n  No
+    //           Locator, if not.
+    //             Ps = 5 5  ⇒  Report Locator status.  The response is CSI ? 5
+    //           3 n  Locator available, if compiled-in, or CSI ? 5 0 n  No
+    //           Locator, if not.
+    //             Ps = 5 6  ⇒  Report Locator type.  The response is CSI ? 5 7
+    //           ; 1 n  Mouse, if compiled-in, or CSI ? 5 7 ; 0 n  Cannot iden-
+    //           tify, if not.
+    //             Ps = 6 2  ⇒  Report macro space (DECMSR).  The response is
+    //           CSI Pn *  { .
+    //             Ps = 6 3  ⇒  Report memory checksum (DECCKSR).  The response
+    //           is States.DCS Pt ! x x x x ST .
+    //               Pt is the request id (from an optional parameter to the
+    //           request).
+    //               The x's are hexadecimal digits 0-9 and A-F.
+    //             Ps = 7 5  ⇒  Report data integrity.  The response is CSI ? 7
+    //           0 n  (ready, no errors).
+    //             Ps = 8 5  ⇒  Report multi-session configuration.  The
+    //           response is CSI ? 8 3 n  (not configured for multiple-session
+    //           operation).
+    // CSI Ps n  Device Status Report (DSR).
+    //             Ps = 5  ⇒  Status Report.
+    //           Result ("OK") is CSI 0 n
+    //             Ps = 6  ⇒  Report Cursor Position (CPR) [row;column].
+    //           Result is CSI r ; c R
+    //
+    //           Note: it is possible for this sequence to be sent by a func-
+    //           tion key.  For example, with the default keyboard configura-
+    //           tion the shifted F1 key may send (with shift-, control-, alt-
+    //           modifiers)
+    //
+    //             CSI 1 ; 2  R , or
+    //             CSI 1 ; 5  R , or
+    //             CSI 1 ; 6  R , etc.
+    //
+    //           The second parameter encodes the modifiers; values range from
+    //           2 to 16.  See the section PC-Styles Function Keys for the
+    //           codes.  The modifyFunctionKeys and modifyKeyboard resources
+    //           can change the form of the string sent from the modified F1
+    //           key.
+    deviceStatusReport(params: number[], isDEC: boolean) {
 
     }
 
+    /**
+     * 设置光标模式
+     * @param params
+     */
+    // CSI > Ps p
+    //           Set resource value pointerMode.  This is used by xterm to
+    //           decide whether to hide the pointer cursor as the user types.
+    //
+    //           Valid values for the parameter:
+    //             Ps = 0  ⇒  never hide the pointer.
+    //             Ps = 1  ⇒  hide if the mouse tracking mode is not enabled.
+    //             Ps = 2  ⇒  always hide the pointer, except when leaving the
+    //           window.
+    //             Ps = 3  ⇒  always hide the pointer, even if leaving/entering
+    //           the window.
+    //
+    //           If no parameter is given, xterm uses the default, which is 1 .
     setPointerMode(params: number[]) {
 
     }
 
+    /**
+     * 重置软终端
+     */
+    // CSI ! p   Soft terminal reset (DECSTR), VT220 and up.
+    // http://vt100.net/docs/vt220-rm/table4-10.html
     resetSoftTerminal() {
 
+        this.terminal.showCursor();
+        // this.originMode = false;
+        // this.autoWrap = false;
+
+        this._applicationCursorKeys = false;
+
+        this.activeBuffer.scrollTop = 1;
+        this.activeBuffer.scrollBottom = this.terminal.rows;
+        // this.parser.charset = null;
+        this.parser.x = 1;   // ?
+        this.parser.y = 1;   // ?
+        // this.parser.gcharset = null; // ?
+        // this.parser.glevel = 0; // ?
+        // this.parser.charsets = [null];
     }
 
+
+    /**
+     * 设置一致性级别
+     * @param params
+     */
+    // CSI Pl ; Pc " p
+    //           Set conformance level (DECSCL), VT220 and up.
+    //
+    //           The first parameter selects the conformance level.  Valid val-
+    //           ues are:
+    //             Pl = 6 1  ⇒  level 1, e.g., VT100.
+    //             Pl = 6 2  ⇒  level 2, e.g., VT200.
+    //             Pl = 6 3  ⇒  level 3, e.g., VT300.
+    //             Pl = 6 4  ⇒  level 4, e.g., VT400.
+    //             Pl = 6 5  ⇒  level 5, e.g., VT500.
+    //
+    //           The second parameter selects the C1 control transmission mode.
+    //           This is an optional parameter, ignored in conformance level 1.
+    //           Valid values are:
+    //             Pc = 0  ⇒  8-bit controls.
+    //             Pc = 1  ⇒  7-bit controls (DEC factory default).
+    //             Pc = 2  ⇒  8-bit controls.
+    //
+    //           The 7-bit and 8-bit control modes can also be set by S7C1T and
+    //           S8C1T, but DECSCL is preferred.
     setConformanceLevel(params: number[]) {
+        let [pl, pc] = params;
+        console.info(`setConformanceLevel: pl=${pl}, pc=${pc}`);
+    }
+
+    /**
+     * 请求ANSI模式
+     * @param params
+     * @param isDEC
+     */
+    // CSI Ps $ p
+    //           Request ANSI mode (DECRQM).  For VT300 and up, reply DECRStates.PM is
+    //             CSI Ps; Pm$ y
+    //           where Ps is the mode number as in SM/RM, and Pm is the mode
+    //           value:
+    //             0 - not recognized
+    //             1 - set
+    //             2 - reset
+    //             3 - permanently set
+    //             4 - permanently reset
+    // CSI ? Ps $ p
+    //           Request DEC private mode (DECRQM).  For VT300 and up, reply
+    //           DECRStates.PM is
+    //             CSI ? Ps; Pm$ y
+    //           where Ps is the mode number as in DECSET/DECSET, Pm is the
+    //           mode value as in the ANSI DECRQM.
+    //           Two private modes are read-only (i.e., 1 3  and 1 4 ), pro-
+    //           vided only for reporting their values using this control
+    //           sequence.  They correspond to the resources cursorBlink and
+    //           cursorBlinkXOR.
+    requestANSIMode(params: number[], isDEC: boolean) {
 
     }
 
-    requestANSIMode(params: number[], b: boolean) {
-
-    }
-
+    /**
+     * 将video属性推送到堆栈上
+     * @param params
+     */
+    // CSI # p
+    // CSI Pm # p
+    //           Push video attributes onto stack (XTPUSHSGR), xterm.  This is
+    //           an alias for CSI # { , used to work around language limitations of C#.
     pushVideoAttrsOntoStack(params: number[]) {
 
     }
 
+    /**
+     * 从堆栈弹出Video属性
+     */
+    // CSI # q   Pop video attributes from stack (XTPOPSGR), xterm.  This is an
+    //           alias for CSI # } , used to work around language limitations
+    //           of C#.
     popVideoAttrsFromStack() {
 
     }
 
+    /**
+     * 选择字符保护属性
+     * @param params
+     */
+    // CSI Ps " q
+    //           Select character protection attribute (DECSCA).  Valid values
+    //           for the parameter:
+    //             Ps = 0  ⇒  DECSED and DECSEL can erase (default).
+    //             Ps = 1  ⇒  DECSED and DECSEL cannot erase.
+    //             Ps = 2  ⇒  DECSED and DECSEL can erase.
     selectCharProtectionAttr(params: number[]) {
 
     }
 
+    /**
+     * 设置光标的样式
+     * @param params
+     */
+    // CSI Ps SP q
+    //           Set cursor style (DECSCUSR), VT520.
+    //             Ps = 0  ⇒  blinking block.
+    //             Ps = 1  ⇒  blinking block (default).
+    //             Ps = 2  ⇒  steady block.
+    //             Ps = 3  ⇒  blinking underline.
+    //             Ps = 4  ⇒  steady underline.
+    //             Ps = 5  ⇒  blinking bar, xterm.
+    //             Ps = 6  ⇒  steady bar, xterm.
     setCursorStyle(params: number[]) {
 
     }
 
+    /**
+     * 加载LED
+     * @param params
+     */
+    // CSI Ps q  Load LEDs (DECLL), VT100.
+    //             Ps = 0  ⇒  Clear all LEDS (default).
+    //             Ps = 1  ⇒  Light Num Lock.
+    //             Ps = 2  ⇒  Light Caps Lock.
+    //             Ps = 3  ⇒  Light Scroll Lock.
+    //             Ps = 2 1  ⇒  Extinguish Num Lock.
+    //             Ps = 2 2  ⇒  Extinguish Caps Lock.
+    //             Ps = 2 3  ⇒  Extinguish Scroll Lock.
     loadLeds(params: number[]) {
 
     }
 
+    /**
+     * 重置专用模式
+     * @param params
+     */
+    // CSI ? Pm r
+    //           Restore DEC Private Mode Values.  The value of Ps previously
+    //           saved is restored.  Ps values are the same as for DECSET.
     restoreDECPrivateMode(params: number[]) {
 
     }
 
+    /**
+     * 更改矩形区域中的属性
+     * @param params
+     */
+    // CSI Pt ; Pl ; Pb ; Pr ; Ps $ r
+    //           Change Attributes in Rectangular Area (DECCARA), VT400 and up.
+    //             Pt ; Pl ; Pb ; Pr denotes the rectangle.
+    //             Ps denotes the SGR attributes to change: 0, 1, 4, 5, 7.
     changeAttrsInRectangularArea(params: number[]) {
 
     }
 
+    /**
+     * 设置滚动区域
+     * @param params
+     */
+    // CSI Ps ; Ps r
+    //           Set Scrolling Region [top;bottom] (default = full size of win-
+    //           dow) (DECSTBM), VT100.
     setScrollingRegion(params: number[]) {
-
+        [this.activeBuffer.scrollTop, this.activeBuffer.scrollBottom] = params;
     }
 
+    /**
+     * 保存专用模式
+     * @param params
+     */
+    // CSI ? Pm s
+    //           Save DEC Private Mode Values.  Ps values are the same as for
+    //           DECSET.
     saveDECPrivateMode(params: number[]) {
 
     }
 
+    /**
+     * 设置margins
+     * @param params
+     */
+    // CSI Pl ; Pr s
+    //           Set left and right margins (DECSLRM), VT420 and up.  This is
+    //           available only when DECLRMM is enabled.
     setMargins(params: number[]) {
-
+        const [pl, pr] = params;
+        console.info(`pl: ${pl}, pr: ${pr}`);
     }
 
+    /**
+     * 设置标题模式
+     * @param params
+     */
+    // CSI > Pm t
+    //           This xterm control sets one or more features of the title
+    //           modes.  Each parameter enables a single feature.
+    //             Ps = 0  ⇒  Set window/icon labels using hexadecimal.
+    //             Ps = 1  ⇒  Query window/icon labels using hexadecimal.
+    //             Ps = 2  ⇒  Set window/icon labels using UTF-8.
+    //             Ps = 3  ⇒  Query window/icon labels using UTF-8.  (See dis-
+    //           cussion of Title Modes)
     setTitleModeFeatures(params: number[]) {
 
     }
 
+    /**
+     * 设置响铃音量
+     * @param params
+     */
+    // CSI Ps SP t
+    //           Set warning-bell volume (DECSWBV), VT520.
+    //             Ps = 0  or 1  ⇒  off.
+    //             Ps = 2 , 3  or 4  ⇒  low.
+    //             Ps = 5 , 6 , 7 , or 8  ⇒  high.
     setWarningBellVolume(params: number[]) {
-
+        switch (params[0]) {
+            case 0:
+            case 1:
+                // this.warningBellVolume = 0;
+                break;
+            case 2:
+            case 3:
+            case 4:
+                // this.warningBellVolume = 1;
+                break;
+            case 5:
+            case 6:
+            case 7:
+            case 8:
+                // this.warningBellVolume = 2;
+                break;
+        }
     }
 
+    /**
+     * 矩形区域中的反转属性
+     * @param params
+     */
     reverseAttrsInRectArea(params: number[]) {
 
     }
 
+    /**
+     * 窗口操作
+     * @param params
+     */
+    // CSI Ps ; Ps ; Ps t
+    //           Window manipulation (from dtterm, as well as extensions by
+    //           xterm).  These controls may be disabled using the allowWin-
+    //           dowOps resource.
+    //
+    //           xterm uses Extended Window Manager Hints (EWMH) to maximize
+    //           the window.  Some window managers have incomplete support for
+    //           EWMH.  For instance, fvwm, flwm and quartz-wm advertise sup-
+    //           port for maximizing windows horizontally or vertically, but in
+    //           fact equate those to the maximize operation.
+    //
+    //           Valid values for the first (and any additional parameters)
+    //           are:
+    //             Ps = 1  ⇒  De-iconify window.
+    //             Ps = 2  ⇒  Iconify window.
+    //             Ps = 3 ;  x ;  y ⇒  Move window to [x, y].
+    //             Ps = 4 ;  height ;  width ⇒  Resize the xterm window to
+    //           given height and width in pixels.  Omitted parameters reuse
+    //           the current height or width.  Zero parameters use the dis-
+    //           play's height or width.
+    //             Ps = 5  ⇒  Raise the xterm window to the front of the stack-
+    //           ing order.
+    //             Ps = 6  ⇒  Lower the xterm window to the bottom of the
+    //           stacking order.
+    //             Ps = 7  ⇒  Refresh the xterm window.
+    //             Ps = 8 ;  height ;  width ⇒  Resize the text area to given
+    //           height and width in characters.  Omitted parameters reuse the
+    //           current height or width.  Zero parameters use the display's
+    //           height or width.
+    //             Ps = 9 ;  0  ⇒  Restore maximized window.
+    //             Ps = 9 ;  1  ⇒  Maximize window (i.e., resize to screen
+    //           size).
+    //             Ps = 9 ;  2  ⇒  Maximize window vertically.
+    //             Ps = 9 ;  3  ⇒  Maximize window horizontally.
+    //             Ps = 1 0 ;  0  ⇒  Undo full-screen mode.
+    //             Ps = 1 0 ;  1  ⇒  Change to full-screen.
+    //             Ps = 1 0 ;  2  ⇒  Toggle full-screen.
+    //             Ps = 1 1  ⇒  Report xterm window state.
+    //           If the xterm window is non-iconified, it returns CSI 1 t .
+    //           If the xterm window is iconified, it returns CSI 2 t .
+    //             Ps = 1 3  ⇒  Report xterm window position.
+    //           Note: X Toolkit positions can be negative, but the reported
+    //           values are unsigned, in the range 0-65535.  Negative values
+    //           correspond to 32768-65535.
+    //           Result is CSI 3 ; x ; y t
+    //             Ps = 1 3 ;  2  ⇒  Report xterm text-area position.
+    //           Result is CSI 3 ; x ; y t
+    //             Ps = 1 4  ⇒  Report xterm text area size in pixels.
+    //           Result is CSI  4 ;  height ;  width t
+    //             Ps = 1 4 ;  2  ⇒  Report xterm window size in pixels.
+    //           Normally xterm's window is larger than its text area, since it
+    //           includes the frame (or decoration) applied by the window man-
+    //           ager, as well as the area used by a scroll-bar.
+    //           Result is CSI  4 ;  height ;  width t
+    //             Ps = 1 5  ⇒  Report size of the screen in pixels.
+    //           Result is CSI  5 ;  height ;  width t
+    //             Ps = 1 6  ⇒  Report xterm character cell size in pixels.
+    //           Result is CSI  6 ;  height ;  width t
+    //             Ps = 1 8  ⇒  Report the size of the text area in characters.
+    //           Result is CSI  8 ;  height ;  width t
+    //             Ps = 1 9  ⇒  Report the size of the screen in characters.
+    //           Result is CSI  9 ;  height ;  width t
+    //             Ps = 2 0  ⇒  Report xterm window's icon label.
+    //           Result is States.OSC  L  label ST
+    //             Ps = 2 1  ⇒  Report xterm window's title.
+    //           Result is States.OSC  l  label ST
+    //             Ps = 2 2 ; 0  ⇒  Save xterm icon and window title on stack.
+    //             Ps = 2 2 ; 1  ⇒  Save xterm icon title on stack.
+    //             Ps = 2 2 ; 2  ⇒  Save xterm window title on stack.
+    //             Ps = 2 3 ; 0  ⇒  Restore xterm icon and window title from
+    //           stack.
+    //             Ps = 2 3 ; 1  ⇒  Restore xterm icon title from stack.
+    //             Ps = 2 3 ; 2  ⇒  Restore xterm window title from stack.
+    //             Ps >= 2 4  ⇒  Resize to Ps lines (DECSLPP), VT340 and VT420.
+    //           xterm adapts this by resizing its window.
     windowManipulation(params: number[]) {
-
+        switch (params[0]) {
+            case 1:
+                // De-iconify window.
+                break;
+            case 2:
+                // Iconify window.
+                break;
+            case 3:
+                // 3 ;  x ;  y ⇒  Move window to [x, y].
+                break;
+            case 4:
+                // 4 ;  height ;  width ⇒  Resize the xterm window to given height and width in pixels.
+                // Omitted parameters reuse the current height or width.
+                break;
+            case 5:
+                // Raise the xterm window to the front of the stacking order.
+                break;
+            case 6:
+                // Lower the xterm window to the bottom of the stacking order.
+                break;
+            case 7:
+                // Refresh the xterm window.
+                break;
+            case 8:
+                // 8 ;  height ;  width ⇒  Resize the text area to given height and width in characters.
+                // Omitted parameters reuse the current height or width.
+                break;
+            case 9:
+                if(params[1] === 0){
+                    // Restore maximized window.
+                } else if(params[1] === 1){
+                    // Maximize window (i.e., resize to screen size).
+                } else if(params[1] === 2){
+                    // Maximize window vertically.
+                } else if(params[1] === 3){
+                    // Maximize window horizontally.
+                }
+                break;
+            case 10:
+                if(params[1] === 0){
+                    // Undo full-screen mode.
+                } else if(params[1] === 1){
+                    // Change to full-screen.
+                } else if(params[1] === 2){
+                    // Toggle full-screen.
+                }
+                break;
+            case 11:
+                break;
+            case 13:
+                break;
+            case 14:
+                break;
+            case 15:
+                // Report size of the screen in pixels.
+                //           Result is CSI  5 ;  height ;  width t
+                break;
+            case 16:
+                // Report xterm character cell size in pixels. Result is CSI  6 ;  height ;  width t
+                break;
+            case 18:
+                // Report the size of the text area in characters. Result is CSI  8 ;  height ;  width t
+                break;
+            case 19:
+                // Report the size of the screen in characters. Result is CSI  9 ;  height ;  width t
+                break;
+            case 20:
+                // Report xterm window's icon label. Result is OSC  L  label ST
+                break;
+            case 21:
+                // Report xterm window's title. Result is OSC  l  label ST
+                break;
+            case 22:
+                if(params[1] === 0){
+                    // Save xterm icon and window title on stack.
+                } else if(params[1] === 1){
+                    // Save xterm icon title on stack.
+                    console.info("Save xterm icon title on stack.");
+                } else if(params[1] === 2){
+                    // Save xterm window title on stack.
+                    console.info("Save xterm window title on stack.");
+                }
+                break;
+            case 23:
+                if(params[1] === 0){
+                    // Restore xterm icon and window title from stack.
+                } else if(params[1] === 1){
+                    // Restore xterm icon title from stack.
+                } else if(params[1] === 2){
+                    // Restore xterm window title from stack.
+                }
+                break;
+            default:
+                // >= 24
+                // Resize to Ps lines (DECSLPP), VT340 and VT420.
+                // xterm adapts this by resizing its window.
+        }
     }
 
+    /**
+     * 复制矩形区域
+     * @param params
+     */
+    // CSI Pt ; Pl ; Pb ; Pr ; Pp ; Pt ; Pl ; Pp $ v
+    //           Copy Rectangular Area (DECCRA), VT400 and up.
+    //             Pt ; Pl ; Pb ; Pr denotes the rectangle.
+    //             Pp denotes the source page.
+    //             Pt ; Pl denotes the target location.
+    //             Pp denotes the target page.
     copyRectangularArea(params: number[]) {
 
     }
 
+    /**
+     * 请求呈现状态报告
+     * @param params
+     */
+    // CSI Ps $ w
+    //           Request presentation state report (DECRQPSR), VT320 and up.
+    //             Ps = 0  ⇒  error.
+    //             Ps = 1  ⇒  cursor information report (DECCIR).
+    //           Response is
+    //             States.DCS 1 $ u Pt ST
+    //           Refer to the VT420 programming manual, which requires six
+    //           pages to document the data string Pt,
+    //             Ps = 2  ⇒  tab stop report (DECTABSR).
+    //           Response is
+    //             States.DCS 2 $ u Pt ST
+    //           The data string Pt is a list of the tab-stops, separated by
+    //           "/" characters.
     requestPresentationStateReport(params: number[]) {
 
     }
 
+    /**
+     * 启用筛选矩形
+     * @param params
+     */
+    // CSI Pt ; Pl ; Pb ; Pr ' w
+    //           Enable Filter Rectangle (DECEFR), VT420 and up.
+    //           Parameters are [top;left;bottom;right].
+    //           Defines the coordinates of a filter rectangle and activates
+    //           it.  Anytime the locator is detected outside of the filter
+    //           rectangle, an outside rectangle event is generated and the
+    //           rectangle is disabled.  Filter rectangles are always treated
+    //           as "one-shot" events.  Any parameters that are omitted default
+    //           to the current locator position.  If all parameters are omit-
+    //           ted, any locator motion will be reported.  DECELR always can-
+    //           cels any prevous rectangle definition.
     enableFilterRectangle(params: number[]) {
 
     }
 
+    /**
+     * 选择属性更改范围
+     * @param params
+     */
+    // CSI Ps * x
+    //           Select Attribute Change Extent (DECSACE), VT420 and up.
+    //             Ps = 0  ⇒  from start to end position, wrapped.
+    //             Ps = 1  ⇒  from start to end position, wrapped.
+    //             Ps = 2  ⇒  rectangle (exact).
     selectAttrChangeExtent(params: number[]) {
 
     }
 
+    /**
+     * 填充矩形区域
+     * @param params
+     */
+    // CSI Pc ; Pt ; Pl ; Pb ; Pr $ x
+    //           Fill Rectangular Area (DECFRA), VT420 and up.
+    //             Pc is the character to use.
+    //             Pt ; Pl ; Pb ; Pr denotes the rectangle.
     fillRectArea(params: number[]) {
 
     }
 
+    /**
+     * 选择校验和扩展
+     * @param params
+     */
+    // CSI Ps # y
+    //           Select checksum extension (XTCHECKSUM), xterm.  The bits of Ps
+    //           modify the calculation of the checksum returned by DECRQCRA:
+    //             0  ⇒  do not negate the result.
+    //             1  ⇒  do not report the VT100 video attributes.
+    //             2  ⇒  do not omit checksum for blanks.
+    //             3  ⇒  omit checksum for cells not explicitly initialized.
+    //             4  ⇒  do not mask cell value to 8 bits or ignore combining
+    //           characters.
+    //             5  ⇒  do not mask cell value to 7 bits.
     selectChecksumExtension(params: number[]) {
 
     }
 
+    /**
+     * 请求矩形区域的校验和
+     * @param params
+     */
+    // CSI Pi ; Pg ; Pt ; Pl ; Pb ; Pr * y
+    //           Request Checksum of Rectangular Area (DECRQCRA), VT420 and up.
+    //           Response is
+    //           States.DCS Pi ! ~ x x x x ST
+    //             Pi is the request id.
+    //             Pg is the page number.
+    //             Pt ; Pl ; Pb ; Pr denotes the rectangle.
+    //             The x's are hexadecimal digits 0-9 and A-F.
     requestRectAreaChecksum(params: number[]) {
-
+        // const [requestId, pageNum, pt, pl, pb, pr] = params;
+        // console.info(`requestRectAreaChecksum, requestId=${requestId}`);
     }
 
+    /**
+     * 启用定位程序报告
+     * @param params
+     */
+    // CSI Ps ; Pu ' z
+    //           Enable Locator Reporting (DECELR).
+    //           Valid values for the first parameter:
+    //             Ps = 0  ⇒  Locator disabled (default).
+    //             Ps = 1  ⇒  Locator enabled.
+    //             Ps = 2  ⇒  Locator enabled for one report, then disabled.
+    //           The second parameter specifies the coordinate unit for locator
+    //           reports.
+    //           Valid values for the second parameter:
+    //             Pu = 0  or omitted ⇒  default to character cells.
+    //             Pu = 1  ⇐  device physical pixels.
+    //             Pu = 2  ⇐  character cells.
     enableLocatorReporting(params: number[]) {
-
+        const [ps, pu] = params;
+        console.info(`enableLocatorReporting, pt=${ps}, pl=${pu}`);
     }
 
+    /**
+     * 抹除矩形区域
+     * @param params
+     */
+    // CSI Pt ; Pl ; Pb ; Pr $ z
+    //           Erase Rectangular Area (DECERA), VT400 and up.
+    //             Pt ; Pl ; Pb ; Pr denotes the rectangle.
     eraseRectArea(params: number[]) {
-
+        const [pt, pl, pb, pr] = params;
+        console.info(`eraseRectArea, pt=${pt}, pl=${pl}, pb=${pb}, pr=${pr}`);
     }
 
+    /**
+     * 选择定位程序事件
+     * @param params
+     */
+    // CSI Pm ' {
+    //           Select Locator Events (DECSLE).
+    //           Valid values for the first (and any additional parameters)
+    //           are:
+    //             Ps = 0  ⇒  only respond to explicit host requests (DECRQLP).
+    //           This is default.  It also cancels any filter rectangle.
+    //             Ps = 1  ⇒  report button down transitions.
+    //             Ps = 2  ⇒  do not report button down transitions.
+    //             Ps = 3  ⇒  report button up transitions.
+    //             Ps = 4  ⇒  do not report button up transitions.
     selectLocatorEvents(params: number[]) {
 
     }
 
+    /**
+     * 选择性抹除矩阵区域
+     * @param params
+     */
+    // CSI Pt ; Pl ; Pb ; Pr $ {
+    //           Selective Erase Rectangular Area (DECSERA), VT400 and up.
+    //             Pt ; Pl ; Pb ; Pr denotes the rectangle.
     selectEraseRectArea(params: number[]) {
-
+        const [pt, pl, pb, pr] = params;
+        console.info(`selectEraseRectArea, pt=${pt}, pl=${pl}, pb=${pb}, pr=${pr}`);
     }
 
+    /**
+     * 报告选定的图形格式副本
+     * @param params
+     */
+    // CSI Pt ; Pl ; Pb ; Pr # |
+    //           Report selected graphic rendition (XTREPORTSGR), xterm.  The
+    //           response is an SGR sequence which contains the attributes
+    //           which are common to all cells in a rectangle.
+    //             Pt ; Pl ; Pb ; Pr denotes the rectangle.
     reportSelectedGraphicRendition(params: number[]) {
 
     }
 
+    /**
+     * 每页选择列
+     * @param params
+     */
+    // CSI Ps $ |
+    //           Select columns per page (DECSCPP), VT340.
+    //             Ps = 0  ⇒  80 columns, default if Ps omitted.
+    //             Ps = 8 0  ⇒  80 columns.
+    //             Ps = 1 3 2  ⇒  132 columns.
     selectColumnsPerPage(params: number[]) {
 
     }
 
+    /**
+     * 请求定位器位置
+     * @param params
+     */
+    // CSI Ps ' |
+    //           Request Locator Position (DECRQLP).
+    //           Valid values for the parameter are:
+    //             Ps = 0 , 1 or omitted ⇒  transmit a single DECLRP locator
+    //           report.
+    //
+    //           If Locator Reporting has been enabled by a DECELR, xterm will
+    //           respond with a DECLRP Locator Report.  This report is also
+    //           generated on button up and down events if they have been
+    //           enabled with a DECSLE, or when the locator is detected outside
+    //           of a filter rectangle, if filter rectangles have been enabled
+    //           with a DECEFR.
+    //
+    //             ⇐  CSI Pe ; Pb ; Pr ; Pc ; Pp &  w
+    //
+    //           Parameters are [event;button;row;column;page].
+    //           Valid values for the event:
+    //             Pe = 0  ⇐  locator unavailable - no other parameters sent.
+    //             Pe = 1  ⇐  request - xterm received a DECRQLP.
+    //             Pe = 2  ⇐  left button down.
+    //             Pe = 3  ⇐  left button up.
+    //             Pe = 4  ⇐  middle button down.
+    //             Pe = 5  ⇐  middle button up.
+    //             Pe = 6  ⇐  right button down.
+    //             Pe = 7  ⇐  right button up.
+    //             Pe = 8  ⇐  M4 button down.
+    //             Pe = 9  ⇐  M4 button up.
+    //             Pe = 1 0  ⇐  locator outside filter rectangle.
+    //           The "button" parameter is a bitmask indicating which buttons
+    //           are pressed:
+    //             Pb = 0  ⇐  no buttons down.
+    //             Pb & 1  ⇐  right button down.
+    //             Pb & 2  ⇐  middle button down.
+    //             Pb & 4  ⇐  left button down.
+    //             Pb & 8  ⇐  M4 button down.
+    //           The "row" and "column" parameters are the coordinates of the
+    //           locator position in the xterm window, encoded as ASCII deci-
+    //           mal.
+    //           The "page" parameter is not used by xterm.
     requestLocatorPosition(params: number[]) {
 
     }
 
+    /**
+     * 选择每个屏幕的行数
+     * @param params
+     */
+    // CSI Ps * |
+    //           Select number of lines per screen (DECSNLS), VT420 and up.
     selectNumberOfLinesPerScreen(params: number[]) {
 
     }
+
 
 }

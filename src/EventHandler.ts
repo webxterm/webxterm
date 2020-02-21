@@ -1,16 +1,18 @@
 /**
  * 事件处理器
  */
-import {Composition} from "./common/Composition";
 import {Keyboard} from "./input/Keyboard";
-import {FocusTarget, Terminal} from "./Terminal";
+import {Terminal} from "./Terminal";
 import {CommonUtils} from "./common/CommonUtils";
 import {Styles} from "./Styles";
 
-export class EventHandler {
+enum FocusTarget {
+    UNDEFINED,  // 未定义
+    CONTAINER,  // 容器
+    CLIPBOARD   // 粘贴板
+}
 
-    // 联想输入
-    private composing: Composition = new Composition();
+export class EventHandler {
 
     // 键盘输入
     private keyboard: Keyboard = new Keyboard();
@@ -23,14 +25,6 @@ export class EventHandler {
 
     // 按快捷键全选。
     private quickSelectAll: boolean = false;
-
-    private terminal: Terminal;
-
-    private styles: Styles = Styles.getStyles();
-
-    constructor(terminal: Terminal) {
-        this.terminal = terminal;
-    }
 
     /**
      * 获取选中的内容
@@ -65,47 +59,49 @@ export class EventHandler {
     /**
      * 监听
      */
-    public listen(): void {
+    listen(terminal: Terminal) {
 
         const defaultOption: object = { preventScroll: true };
+        let focusTarget = FocusTarget.UNDEFINED;
+        let container = terminal.container;
+        let clipboard = terminal.clipboard;
 
         // 注册容器点击事件
-        this.container.addEventListener("click", (e: Event) => {
+        container.addEventListener("click", (e: Event) => {
+            console.info(e);
             this.quickSelectAll = false;
-            console.info(e);
-            console.info(this.getSelection());
             if (this.getSelection().length === 0) {
-                this.clipboard.focus(defaultOption);
+                clipboard.focus(defaultOption);
             }
         });
 
-        this.container.addEventListener("paste", (e: ClipboardEvent) => {
+        container.addEventListener("paste", (e: ClipboardEvent) => {
             console.info(e);
-            this.clipboard.focus();
+            clipboard.focus();
             if(e.clipboardData){
-                this.paste(e.clipboardData.getData('text'), 'clipboard2');
+                this.paste(e.clipboardData.getData('text'), 'clipboard2', terminal);
             }
 
         });
 
-        this.container.addEventListener("mousedown", (e: MouseEvent) => {
-            console.info(e);
+        container.addEventListener("mousedown", (e: MouseEvent) => {
+            // console.info(e);
 
             switch (e.button) {
                 case 0:
                     // 左键按下
                     console.info('左键按下');
-                    this.terminal.focusTarget = FocusTarget.CONTAINER;
+                    focusTarget = FocusTarget.CONTAINER;
 
                     // 终端获取焦点
-                    this.terminal.focus();
+                    clipboard.focus(defaultOption);
 
                     return;
                 case 1:
                     // 滚轮（中键）按下
                     e.preventDefault();
-                    this.paste(this.selectionContent, 'mouse(wheel|middle)');
-                    this.terminal.clipboard.focus();
+                    this.paste(this.selectionContent, 'mouse(wheel|middle)', terminal);
+                    clipboard.focus();
 
                     break;
                 case 2:
@@ -131,12 +127,12 @@ export class EventHandler {
                         let target: HTMLElement = <HTMLElement> e.target
                             , x = e.pageX
                             , y = 0
-                            , h = this.terminal.charHeight;
+                            , h = terminal.charHeight;
 
-                        if (target === this.terminal.container) {
+                        if (target === terminal.container) {
                             console.info('光标落在容器中....');
-                            y = e.pageY - (e.pageY % this.terminal.charHeight);
-                        } else if (target === this.terminal.presentation) {
+                            y = e.pageY - (e.pageY % terminal.charHeight);
+                        } else if (target === terminal.presentation) {
                             // 相当于光标落在最后一行数据行中。
                             y = target.offsetTop;
                             h = target.getBoundingClientRect().height;
@@ -149,23 +145,23 @@ export class EventHandler {
                             break;
                         }
 
-                        this.styles.put(".clipboard", {
+                        Styles.add(".clipboard", {
                             position: "absolute",
-                            left: (x - this.terminal.charWidth / 2) + "px",
+                            left: (x - terminal.charWidth / 2) + "px",
                             top: y + "px",
                             height: h + "px",
                             width: (target.getBoundingClientRect().width - x) + "px"
-                        }, this.terminal.instanceId);
+                        }, terminal.instanceId);
 
                         setTimeout(() => {
 
-                            this.styles.put(".clipboard", {
+                            Styles.add(".clipboard", {
                                 position: "",
                                 left: "",
                                 top: "",
                                 height: "",
                                 width: ""
-                            }, this.terminal.instanceId);
+                            }, terminal.instanceId);
 
                         }, 100);
                     }
@@ -182,7 +178,7 @@ export class EventHandler {
         });
 
 
-        this.container.addEventListener('mouseup', () => {
+        container.addEventListener('mouseup', () => {
 
             // console.info(e);
 
@@ -197,7 +193,7 @@ export class EventHandler {
 
         });
 
-        this.clipboard.addEventListener('keydown', (e:KeyboardEvent) => {
+        clipboard.addEventListener('keydown', (e:KeyboardEvent) => {
 
             console.info(e);
             this.quickSelectAll = false;
@@ -213,7 +209,7 @@ export class EventHandler {
                     this.quickSelectAll = true;
                     // let sel = window.getSelection();
                     // sel.selectAllChildren(this.terminal.outputEl);
-                    this.terminal.clipboard.blur();
+                    clipboard.blur();
                     return;
                 }
             }
@@ -224,92 +220,166 @@ export class EventHandler {
             // 禁止冒泡
             e.stopPropagation();
 
-            // let keySym = keyboard.getKeySym(e, this.terminal.applicationMode);
-            //
-            // if (!!keySym) {
+            let keySym = this.keyboard.getKeySym(e,
+                terminal.parser.esParser.applicationCursorKeys,
+                terminal.parser.applicationKeypad);
 
-                // if(this.terminal.connected){
-                //     this.send(keySym);
-                // } else {
-                //     // 未连接终端
-                //     //
-                //     if(keySym === C0.CR){
-                //         this.terminal.echo('\r\n');
-                //         if(this.terminal.password !== undefined){
-                //             // 验证密码
-                //             // 解析ssh命令
-                //             this.terminal.transceiver.server.password = this.terminal.password;
-                //             delete this.terminal.password;
-                //
-                //             this.terminal.handleSSHConnect();
-                //
-                //         }
-                //         this.terminal.printPrompt();
-                //     } else {
-                //         this.terminal.print(keySym);
-                //     }
-                //
-                // }
-                //
-                // if(keySym === C0.LF){
-                //     this.terminal.clipboard.value = '';
-                // }
-
-                // this.send(keySym);
-            //
-            // }
+            this.paste(keySym, "key", terminal);
 
         });
 
 
-        this.clipboard.addEventListener("contextmenu", () => {
-            this.clipboard.focus();
+        clipboard.addEventListener("contextmenu", () => {
+            clipboard.focus();
         });
 
-        this.clipboard.addEventListener("compositionstart", (e) => {
+        let compositionElement: HTMLSpanElement, compositionBlinkingTimer: number = 0;
+
+        clipboard.addEventListener("compositionstart", (e) => {
             if(e instanceof CompositionEvent) {
-                this.composing.update = e.data;
-                this.composing.done = false;
-                this.composing.running = true;
-                console.info(this.composing);
-                // this.terminal.echoComposition(this.composing);
+                // this.composing.update = e.data;
+                // this.composing.done = false;
+                // this.composing.running = true;
+                // console.info(this.composing);
+
+                // 显示联想输入
+                compositionElement = document.createElement("span");
+                compositionElement.className = "composition";
+                compositionElement.innerHTML = e.data;
+                let currentElement = terminal.cursor.currentElement;
+                if(currentElement && currentElement.parentElement){
+                    currentElement.parentElement.insertBefore(compositionElement, currentElement);
+                }
+                // 隐藏当前的光标
+                terminal.hideCursor();
             }
         });
 
         // 联想输入更新
-        this.clipboard.addEventListener('compositionupdate', (e) => {
+        clipboard.addEventListener('compositionupdate', (e) => {
             if(e instanceof CompositionEvent) {
-                this.composing.update = e.data;
-                console.info(this.composing);
+                // this.composing.update = e.data;
+                // console.info(this.composing);
                 // this.terminal.echoComposition(this.composing);
+                if(compositionElement){
+                    compositionElement.innerHTML = e.data;
+
+                    CommonUtils.addClass(compositionElement, "running");
+                    if(!!compositionBlinkingTimer){
+                        return;
+                    }
+                    compositionBlinkingTimer = setTimeout(() => {
+                        CommonUtils.removeClass(compositionElement, "running");
+                        clearTimeout(compositionBlinkingTimer);
+                        compositionBlinkingTimer = 0;
+                    }, 1200);
+                }
             }
         });
 
         // 联想输入结束
-        this.clipboard.addEventListener('compositionend', (e) => {
+        clipboard.addEventListener('compositionend', (e) => {
             if(e instanceof CompositionEvent){
-                this.composing.update = "";
-                this.composing.done = true;
-                this.composing.running = false;
-                this.composing.end = e.data;
-                console.info(this.composing);
-                this.clipboard.value = '';
+                // this.composing.update = "";
+                // this.composing.done = true;
+                // this.composing.running = false;
+                // this.composing.end = e.data;
+                // console.info(this.composing);
+                // clipboard.value = '';
                 // this.terminal.echoComposition(this.composing);
+                if(compositionElement){
+
+                    compositionElement.innerHTML = e.data;
+
+                    // 发送内容给后台
+                    this.paste(e.data, "composition", terminal);
+
+                    compositionElement.remove();
+
+                    terminal.showCursor();
+                }
             }
         });
 
+        container.addEventListener('scroll', (e) => {
+            // 判断是否滚动到底部。
+            // 如果没有滚动到底部，输出内容的时候，也无需滚动到底部。
+            let target = <HTMLElement> e.target;
+            terminal.scrollToBottom = target.scrollTop + target.getBoundingClientRect().height + 15 >= target.scrollHeight;
+        });
+
+        let resizingTimer: number = 0, blurTimer: number = 0;
+
+        clipboard.addEventListener('focus', (e) => {
+
+            // 如果当前是在失去焦点的时间，则不处理失去焦点的动作。
+            if (blurTimer) {
+                clearTimeout(blurTimer);
+                blurTimer = 0;
+            }
+
+            console.info('获取焦点');
+            e.stopPropagation();
+            terminal.focus();
+            clipboard.value = '';
+            focusTarget = FocusTarget.CLIPBOARD;
+        });
+
+        clipboard.focus(defaultOption);
+
+        clipboard.addEventListener('blur', (e) => {
+            // 如果100ms，没有focus的话，就获取焦点。
+            // 否则，不处理失去焦点
+            blurTimer = setTimeout(() => {
+
+                console.info('失去焦点');
+                e.stopPropagation();
+                if(!this.quickSelectAll && focusTarget !== FocusTarget.CONTAINER){
+                    terminal.blur();
+                }
+
+                if (focusTarget === FocusTarget.CLIPBOARD) {
+                    focusTarget = FocusTarget.UNDEFINED;
+                }
+
+                clearTimeout(blurTimer);
+                blurTimer = 0;
+
+            }, 100);
+
+
+
+        });
+
+        window.addEventListener('blur', () => {
+            focusTarget = FocusTarget.UNDEFINED;
+            terminal.blur();
+        });
+
+        // 窗口大小改变
+        window.onresize = () => {
+            if (!!resizingTimer) {
+                clearTimeout(resizingTimer);
+                resizingTimer = 0;
+            }
+            resizingTimer = setTimeout(() => {
+                if(terminal.eventMap["resize"])
+                    terminal.eventMap["resize"]();
+
+                terminal.resizeWindow();
+
+                clearTimeout(resizingTimer);
+                resizingTimer = 0;
+            }, 100);
+        };
+
     }
 
-
-    get container(): HTMLDivElement {
-        return this.terminal.container;
-    }
-
-    get clipboard(): HTMLTextAreaElement {
-        return this.terminal.clipboard;
-    }
-
-    private paste(data: string, clipboard: string) {
-        console.info("paste:" + data);
+    paste(data: string, clipboard: string, terminal: Terminal) {
+        if(!!data && terminal.transceiver){
+            terminal.transceiver.send(JSON.stringify({
+                "cmd": data
+            }));
+        }
     }
 }

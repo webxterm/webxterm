@@ -1,6 +1,8 @@
 /**
- * 块：存储数据
+ * 数据块
  */
 export interface Block {
+
+
 
 }

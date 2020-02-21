@@ -217,7 +217,7 @@ export class CommonUtils {
      * @param element
      * @param classNames
      */
-    static addClass(element: HTMLElement, classNames: string | string[]){
+    static addClass(element: HTMLElement | null, classNames: string | string[]){
 
         if(!element) return;
 
@@ -248,7 +248,7 @@ export class CommonUtils {
      * @param element
      * @param classNames
      */
-    static removeClass(element: HTMLElement, classNames: string | string[]){
+    static removeClass(element: HTMLElement | null, classNames: string | string[]){
 
         if(!element) return;
 

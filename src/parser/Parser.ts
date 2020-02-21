@@ -1,14 +1,24 @@
 import {Terminal} from "../Terminal";
 import {EscapeSequenceParser} from "./EscapeSequenceParser";
-import {BufferChain} from "./buffer/BufferChain";
-import {ScreenBuffer} from "./buffer/ScreenBuffer";
+import {BufferLine} from "./buffer/BufferLine";
+import {Buffer} from "./buffer/Buffer";
 import {DataBlock} from "./buffer/DataBlock";
-import {MetaDataBlock} from "./buffer/MetaDataBlock";
-import {PlaceholderBlock} from "./buffer/PlaceholderBlock";
 import {OscParser} from "./OscParser";
+import {Printer} from "../Printer";
+import {PlaceholderBlock} from "./buffer/PlaceholderBlock";
+import {BufferSet} from "./buffer/BufferSet";
 
 // http://www.inwap.com/pdp10/ansicode.txt
 // https://vt100.net/docs/vt102-ug/table5-13.html
+
+
+// ==> https://en.wikipedia.org/wiki/Category:Control_characters
+
+// https://en.wikipedia.org/wiki/Linux_console
+
+// https://en.wikipedia.org/wiki/ANSI_escape_code
+// http://ascii-table.com/ansi-escape-sequences.php
+// http://ascii-table.com/ansi-escape-sequences-vt-100.php
 
 // const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 // const [TAB_COMPLETION_LENGTH, TAB_COMPLETION_CHAR] = [8, "&nbsp;"];
@@ -18,6 +28,7 @@ enum State {
 }
 
 // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
+
 
 // Control functions for a wide variety of applications are specified in ECMA-48.
 // A standardized primary set and supplementary set are included (identified there as C0 and C1 sets).
@@ -65,8 +76,8 @@ const C0 = {
 
 
 // http://vt100.net/docs/vt102-ug/table5-13.html
-const CHARSETS: { [key: string]: object | null } = {};
-CHARSETS.SCLD = { // (0
+const charsets: { [key: string]: object | null } = {};
+charsets.SCLD = { // (0
     "`": "\u25c6", // "◆"
     "a": "\u2592", // "▒"
     "b": "\u0009", // "\t"
@@ -100,19 +111,19 @@ CHARSETS.SCLD = { // (0
     "~": "\u00b7"  // "·"
 };
 
-CHARSETS.UK = null; // (A
-CHARSETS.US = null; // (B (USASCII)
-CHARSETS.Dutch = null; // (4
-CHARSETS.Finnish = null; // (C or (5
-CHARSETS.French = null; // (R
-CHARSETS.FrenchCanadian = null; // (Q
-CHARSETS.German = null; // (K
-CHARSETS.Italian = null; // (Y
-CHARSETS.NorwegianDanish = null; // (E or (6
-CHARSETS.Spanish = null; // (Z
-CHARSETS.Swedish = null; // (H or (7
-CHARSETS.Swiss = null; // (=
-CHARSETS.ISOLatin = null; // /A
+charsets.UK = null; // (A
+charsets.US = null; // (B (USASCII)
+charsets.Dutch = null; // (4
+charsets.Finnish = null; // (C or (5
+charsets.French = null; // (R
+charsets.FrenchCanadian = null; // (Q
+charsets.German = null; // (K
+charsets.Italian = null; // (Y
+charsets.NorwegianDanish = null; // (E or (6
+charsets.Spanish = null; // (Z
+charsets.Swedish = null; // (H or (7
+charsets.Swiss = null; // (=
+charsets.ISOLatin = null; // /A
 
 
 export class Parser {
@@ -120,42 +131,16 @@ export class Parser {
     private charsets: null[] | object[] = [null];
 
     // 缓冲区
-    private buffer1: ScreenBuffer;
-
-    // 备用缓冲区
-    private buffer2: ScreenBuffer;
-
-    // 当前活跃的缓冲区
-    private buffer: ScreenBuffer;
-
-    // x轴: 列
-    public x: number = 1;
-
-    // y轴: 行
-    public y: number = 1;
-
-    // 行号
-    private line: number = 1;
+    private readonly _bufferSet: BufferSet;
 
     // 当前终端
     private terminal: Terminal;
 
-    // 碎片
-    private fragment: DocumentFragment;
-
-    // 滚动区域顶部
-    private scrollTop: number = 1;
-    // 滚动区域底部
-    private scrollBottom: number = 0;
-
     // 解析参数
-    private params: number[] = [];
-    private currentParam: number = 0;
+    private params: any[] = [];
+    private currentParam: any = 0;
     private prefix: string = "";
     private suffix: string = "";
-
-    private params2: string[] = [];
-    private currentParam2: string = "";
 
     // 当前的状态
     private state: State = State.NORMAL;
@@ -163,72 +148,133 @@ export class Parser {
     private _gLevel: number = 0;
     private _gCharset: number = 0;
 
-    private esParser: EscapeSequenceParser;
+    private readonly _esParser: EscapeSequenceParser;
     private oscParser: OscParser;
 
-    private _className: string = "";
-    private _color: string = "";
-    private _backgroundColor: string = "";
+    private _applicationKeypad: boolean = false;
+    private _normalKeypad: boolean = true;
 
     constructor(terminal: Terminal) {
+
         this.terminal = terminal;
+
         // 设置活跃缓冲区为当前的默认缓冲区
-        this.buffer1 = new ScreenBuffer();
-        this.buffer2 = new ScreenBuffer();
-        this.buffer = this.buffer1;
-
-        this.fragment = document.createDocumentFragment();
-
-        this.newBufferChain();
+        this._bufferSet = new BufferSet(this.terminal.rows, this.terminal.columns);
+        let fragment = this._bufferSet.activeBuffer.fillRows();
+        this.viewport.appendChild(fragment);
+        // this._bufferSet.activeBufferLine.element.setAttribute("used", "true");
 
         //
-        this.esParser = new EscapeSequenceParser(terminal, this);
+        this._esParser = new EscapeSequenceParser(terminal, this);
         this.oscParser = new OscParser(terminal, this);
 
+
+
+    }
+
+    get cursorLine(): BufferLine {
+        return this.activeBuffer.get(this.y);
+    }
+
+    get x(){
+        return this.activeBuffer.x;
+    }
+
+    set x(value: number){
+        if(value > this.terminal.columns){
+            value = this.terminal.columns;
+        } else if(value < 1){
+            value = 1;
+        }
+
+        this.activeBuffer.x = value;
+        // 位置改变，由于刷新光标的位置，所以需要标识当前行为脏行
+        this.activeBufferLine.dirty = true;
+    }
+
+    get y(){
+        return this.activeBuffer.y;
+    }
+
+    set y(value: number){
+        if(value > this.terminal.rows){
+            value = this.terminal.rows;
+        } else if(value < 1){
+            value = 1;
+        }
+
+        this.activeBuffer.y = value;
+        // 位置改变，由于刷新光标的位置，所以需要标识当前行为脏行
+        this.activeBufferLine.dirty = true;
+    }
+
+
+
+    get bufferSet(): BufferSet {
+        return this._bufferSet;
+    }
+
+    get printer(): Printer {
+        return this.terminal.printer;
+    }
+
+    get applicationKeypad(): boolean {
+        return this._applicationKeypad;
+    }
+
+    set applicationKeypad(value: boolean) {
+        this._applicationKeypad = value;
+    }
+
+    get esParser(): EscapeSequenceParser {
+        return this._esParser;
+    }
+
+    set gLevel(value: number) {
+        this._gLevel = value;
+    }
+
+    set gCharset(value: number) {
+        this._gCharset = value;
+    }
+
+    get viewport(): HTMLDivElement {
+        return this.terminal.viewport;
+    }
+
+    get activeBufferLine(): BufferLine{
+        return this.activeBuffer.activeBufferLine;
+    }
+
+    get activeBuffer(): Buffer {
+        return this.bufferSet.activeBuffer;
     }
 
     /**
-     * 判断当前缓冲区是否为备用缓冲区
+     * 切换到备用缓冲区、并清除内容
      */
-    get isAlternate(): boolean {
-        return this.buffer === this.buffer2;
+    activateAltBuffer() {
+        this.bufferSet.activateAltBuffer();
+
+        let fragment = document.createDocumentFragment();
+        const lines = this.bufferSet.activeBuffer.lines;
+        for(let i = 0, len = lines.length; i < len; i++){
+            fragment.appendChild(lines[i].element);
+        }
+        this.viewport.appendChild(fragment);
     }
 
     /**
-     * 热链
+     * 切换到默认缓冲区
      */
-    get hotChain(): BufferChain {
-        return this.buffer.get(this.y - 1);
-    }
+    activateNormalBuffer() {
 
-    /**
-     * 切换到备用缓冲区、
-     */
-    public switch2Buffer2(): Parser {
-        return this;
-    }
+        const lines = this.bufferSet.activeBuffer.lines;
+        for(let i = 0, len = lines.length; i < len; i++){
+            lines[i].element.remove();
+        }
 
-    public resetBuffer(): Parser {
-        return this;
-    }
-
-    /**
-     * 创建缓冲区链
-     */
-    newBufferChain(): BufferChain {
-
-        let chain = new BufferChain();
-        this.buffer.addChain(chain, this.y - 1);
-
-        let el = document.createElement("div");
-        el.className = "viewport-row";
-        el.id = "terminal-viewport-row-" + this.line++;
-
-        this.fragment.appendChild(el);
-
-        chain.addBlock(new MetaDataBlock(el));
-
-        return chain;
+        this.bufferSet.activateNormalBuffer();
     }
 
     /**
@@ -236,7 +282,6 @@ export class Parser {
      * @param text
      */
     parse(text: string) {
-
 
         let leftChr: string = ""
             , chr: string = "";
@@ -253,6 +298,10 @@ export class Parser {
 
                     switch (chr) {
 
+                        case C0.NUL:
+                            // 空字符 ""，丢弃
+                            break;
+
                         // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Single-character-functions
                         case C0.BEL:
                             // Bell (BEL  is Ctrl-G).
@@ -260,7 +309,11 @@ export class Parser {
                             break;
                         case C0.BS:
                             // Backspace (BS  is Ctrl-H).
-                            this.x--;
+                            if(this.x > 1){
+                                this.x--;
+                            } else {
+                                this.terminal.bell();
+                            }
                             break;
                         case C0.CR:
                             // Carriage Return (CR  is Ctrl-M).
@@ -271,12 +324,11 @@ export class Parser {
                             // Return Terminal Status (ENQ  is Ctrl-E).
                             break;
                         case C0.FF:
-                            // Form Feed or New Page (NP ).  (FF  is Ctrl-L).
-                            this.newPage();
-                            break;
+                            // Form Feed or New Page (NP ).  (FF  is Ctrl-L). FF  is treated the same as LF .
                         case C0.LF:
                             // Line Feed or New Line (NL).  (LF  is Ctrl-J).
-                            this.newLine();
+                            // 换行或创建新行
+                            this.nextLine();
                             break;
                         case C0.SI:
                             // Switch to Standard Character Set (Ctrl-O is Shift In or LS0).
@@ -292,6 +344,7 @@ export class Parser {
                         //     break;
                         case C0.VT:
                             // Vertical Tab (VT  is Ctrl-K).
+                            this.nextLine();
                             break;
                         case C0.ESC:
                             this.state = State.ESC;
@@ -304,6 +357,92 @@ export class Parser {
                     }
                     break;
                 case State.CHARSET:
+                    let cs;
+                    switch (chr) {
+                        case '0':
+                            // DEC Special Character and Line Drawing Set, VT100.
+                            cs = charsets.SCLD;
+                            break;
+                        case 'A':
+                            // United Kingdom (UK), VT100.
+                            cs = charsets.UK;
+                            break;
+                        case 'B':
+                            // United States (USASCII), VT100.
+                            cs = charsets.US;
+                            break;
+                        case '5':
+                        case 'C':
+                            // Finnish
+                            cs = charsets.Finnish;
+                            break;
+                        case '7':
+                        case 'H':
+                            cs = charsets.Swedish;
+                            break;
+                        case 'K':
+                            cs = charsets.German;
+                            break;
+                        case '9':
+                        case 'Q':
+                            cs = charsets.FrenchCanadian;
+                            break;
+                        case 'f':
+                        case 'R':
+                            cs = charsets.French;
+                            break;
+                        case 'Y':
+                            cs = charsets.Italian;
+                            break;
+                        case 'Z':
+                            cs = charsets.Spanish;
+                            break;
+                        case '4':
+                            cs = charsets.Dutch;
+                            break;
+                        case '"':
+                            // " >  ⇒  Greek, VT500.
+                            // " 4  ⇒  DEC Hebrew, VT500.
+                            // " ?  ⇒  DEC Greek, VT500.
+                            i++;
+                            break;
+                        case '%':
+                            // % 2  ⇒  Turkish, VT500.
+                            // % 6  ⇒  Portuguese, VT300.
+                            // % =  ⇒  Hebrew, VT500.
+                            // % 0  ⇒  DEC Turkish, VT500.
+                            // % 5  ⇒  DEC Supplemental Graphics, VT300.
+                            // % 3  ⇒  SCS NRCS, VT500.
+                            i++;
+                            break;
+                        case '=':
+                            cs = charsets.Swiss;
+                            break;
+                        case '`':
+                        case 'E':
+                        case '6':
+                            cs = charsets.NorwegianDanish;
+                            break;
+                        case '<':
+                            // DEC Supplemental, VT200.
+                            break;
+                        case '>':
+                            // DEC Technical, VT300.
+                            break;
+                        case '&':
+                            // & 4  ⇒  DEC Cyrillic, VT500.
+                            // & 5  ⇒  DEC Russian, VT500.
+                            i++;
+                            break;
+                        default:
+                            cs = charsets.US;
+                            break;
+                    }
+
+                    // this.setGCharset(this.gcharset, cs);
+                    // this.gcharset = null;
+                    this.state = State.NORMAL;
+
                     break;
                 case State.CSI:
 
@@ -343,262 +482,7 @@ export class Parser {
 
                     if (chr === ";") break;
 
-                    switch (chr) {
-
-                        case "@":
-                            this.esParser.insertChars(this.params, this.prefix);
-                            break;
-                        case "A":
-                            this.esParser.cursorUp(this.params);
-                            break;
-                        case "B":
-                            this.esParser.cursorDown(this.params);
-                            break;
-                        case "C":
-                            this.esParser.cursorForward(this.params);
-                            break;
-                        case "D":
-                            this.esParser.cursorBackward(this.params);
-                            break;
-                        case "E":
-                            this.esParser.cursorNextLine(this.params);
-                            break;
-                        case "F":
-                            this.esParser.cursorPrecedingLine(this.params);
-                            break;
-                        case "G":
-                            this.esParser.cursorPosition(undefined, this.params[0] || 1);
-                            break;
-                        case "H":
-                            this.esParser.cursorPosition(this.params[0] || 1, this.params[1] || 1);
-                            break;
-                        case "I":
-                            this.esParser.cursorForwardTabulation(this.params);
-                            break;
-                        case "J":
-                            this.esParser.eraseInDisplay(this.params, this.prefix === "?");
-                            break;
-                        case "K":
-                            this.esParser.eraseInLine(this.params, this.prefix === "?");
-                            break;
-                        case "L":
-                            this.esParser.insertLines(this.params);
-                            break;
-                        case "M":
-                            this.esParser.deleteLines(this.params);
-                            break;
-                        case "P":
-                            this.esParser.deleteChars(this.params);
-                            break;
-                        case "S":
-                            if (this.prefix === "?") {
-                                this.esParser.setOrRequestGraphicsAttr(this.params);
-                            } else {
-                                this.esParser.scrollUpLines(this.params);
-                            }
-                            break;
-                        case "T":
-                            if (this.prefix === ">") {
-                                this.esParser.resetTitleModeFeatures(this.params);
-                            } else if (this.params.length > 1) {
-                                this.esParser.initiateHighlightMouseTacking(this.params);
-                            } else {
-                                this.esParser.scrollDownLines(this.params);
-                            }
-                            break;
-                        case "X":
-                            this.esParser.eraseChars(this.params);
-                            break;
-                        case "Z":
-                            this.esParser.cursorBackwardTabulation(this.params);
-                            break;
-                        case "^":
-                            this.esParser.scrollDownLines(this.params);
-                            break;
-                        case "`":
-                            this.esParser.cursorPosition(undefined, this.params[0] || 1);
-                            break;
-                        case "a":
-                            this.esParser.cursorPosition(undefined, this.x + (this.params[0] || 1));
-                            break;
-                        case "b":
-                            this.esParser.repeatPrecedingGraphicChars(this.params);
-                            break;
-                        case "c":
-                            if (this.prefix === "=") {
-                                this.esParser.sendTertiaryDeviceAttrs(this.params);
-                            } else if (this.prefix === ">") {
-                                this.esParser.sendSecondaryDeviceAttrs(this.params);
-                            } else {
-                                this.esParser.sendPrimaryDeviceAttrs(this.params);
-                            }
-                            break;
-                        case "d":
-                            this.esParser.cursorPosition(this.params[0] || 1);
-                            break;
-                        case "e":
-                            this.esParser.cursorPosition(this.y + (this.params[0] || 1));
-                            break;
-                        case "f":
-                            this.esParser.cursorPosition(this.params[0] || 1, this.params[1] || 1);
-                            break;
-                        case "g":
-                            this.esParser.tabClear(this.params);
-                            break;
-                        case "h":
-                            this.esParser.setMode(this.params, this.prefix === "?");
-                            break;
-                        case "i":
-                            this.esParser.mediaCopy(this.params, this.prefix === "?");
-                            break;
-                        case "l":
-                            this.esParser.resetMode(this.params, this.prefix === "?");
-                            break;
-                        case "m":
-                            if (this.prefix === ">") {
-                                this.esParser.updateKeyModifierOptions(this.params);
-                            } else {
-                                this.esParser.charAttrs(this.params);
-                            }
-                            break;
-                        case "n":
-                            if (this.prefix === ">") {
-                                this.esParser.disableKeyModifierOptions(this.params);
-                                break;
-                            }
-                            this.esParser.deviceStatusReport(this.params, this.prefix === "?");
-                            break;
-                        case "p":
-                            if (this.prefix === ">") {
-                                this.esParser.setPointerMode(this.params);
-                            } else if (this.prefix === "!") {
-                                this.esParser.resetSoftTerminal();
-                            } else if (this.suffix === "\"") {
-                                this.esParser.setConformanceLevel(this.params);
-                            } else if (this.suffix === "$") {
-                                this.esParser.requestANSIMode(this.params, this.prefix === "?");
-                            } else if (this.prefix === "#") {
-                                this.esParser.pushVideoAttrsOntoStack(this.params);
-                            } else if (this.suffix === "#") {
-                                this.esParser.pushVideoAttrsOntoStack(this.params);
-                            }
-                            break;
-                        case "q":
-                            if (this.prefix === "#") {
-                                this.esParser.popVideoAttrsFromStack();
-                            } else if (this.suffix === "\"") {
-                                this.esParser.selectCharProtectionAttr(this.params);
-                            } else if (this.suffix === " ") {
-                                this.esParser.setCursorStyle(this.params);
-                            } else {
-                                this.esParser.loadLeds(this.params);
-                            }
-                            break;
-                        case "r":
-                            if (this.prefix === "?") {
-                                this.esParser.restoreDECPrivateMode(this.params);
-                            } else if (this.suffix === "$") {
-                                this.esParser.changeAttrsInRectangularArea(this.params);
-                            } else {
-                                this.esParser.setScrollingRegion(this.params);
-                            }
-                            break;
-                        case "s":
-                            if (this.prefix === "?") {
-                                this.esParser.saveDECPrivateMode(this.params);
-                            } else if (this.params.length > 1) {
-                                this.esParser.setMargins(this.params);
-                            } else {
-                                this.saveCursor();
-                            }
-                            break;
-                        case "t":
-                            if (this.prefix === ">") {
-                                this.esParser.setTitleModeFeatures(this.params);
-                            } else if (this.suffix === " ") {
-                                this.esParser.setWarningBellVolume(this.params);
-                            } else if (this.suffix === "$") {
-                                this.esParser.reverseAttrsInRectArea(this.params);
-                            } else {
-                                this.esParser.windowManipulation(this.params);
-                            }
-                            break;
-                        case "u":
-                            if (this.suffix === " ") {
-                                this.esParser.setWarningBellVolume(this.params);
-                            } else {
-                                this.restoreCursor();
-                            }
-                            break;
-                        case "v":
-                            if (this.suffix === "$") {
-                                this.esParser.copyRectangularArea(this.params);
-                            }
-                            break;
-                        case "w":
-                            if (this.suffix === "$") {
-                                this.esParser.requestPresentationStateReport(this.params);
-                            } else if (this.suffix === "\"") {
-                                this.esParser.enableFilterRectangle(this.params);
-                            }
-                            break;
-                        case "x":
-                            if (this.suffix === "*") {
-                                this.esParser.selectAttrChangeExtent(this.params);
-                            } else if (this.suffix === "$") {
-                                this.esParser.fillRectArea(this.params);
-                            }
-                            break;
-                        case "y":
-                            if (this.suffix === "#") {
-                                this.esParser.selectChecksumExtension(this.params);
-                            } else if (this.suffix === "*") {
-                                this.esParser.requestRectAreaChecksum(this.params);
-                            }
-                            break;
-                        case "z":
-                            if (this.suffix === "'") {
-                                this.esParser.enableLocatorReporting(this.params);
-                            } else if (this.suffix === "$") {
-                                this.esParser.eraseRectArea(this.params);
-                            }
-                            break;
-                        case "{":
-                            if (this.suffix === "'") {
-                                this.esParser.selectLocatorEvents(this.params);
-                            } else if (this.prefix === "#") {
-                                this.esParser.pushVideoAttrsOntoStack(this.params);
-                            } else if (this.suffix === "#") {
-                                this.esParser.pushVideoAttrsOntoStack(this.params);
-                            } else if (this.suffix === "$") {
-                                this.esParser.selectEraseRectArea(this.params);
-                            }
-                            break;
-                        case "|":
-                            if (this.suffix === "#") {
-                                this.esParser.reportSelectedGraphicRendition(this.params);
-                            } else if (this.suffix === "$") {
-                                this.esParser.selectColumnsPerPage(this.params);
-                            } else if (this.suffix === "'") {
-                                this.esParser.requestLocatorPosition(this.params);
-                            } else if (this.suffix === "*") {
-                                this.esParser.selectNumberOfLinesPerScreen(this.params);
-                            }
-                            break;
-                        case "}":
-                            if (this.prefix === "#") {
-                                this.esParser.popVideoAttrsFromStack();
-                            } else if (this.suffix === "'") {
-                                this.esParser.insertChars(this.params);
-                            }
-                            break;
-                        case "~":
-                            if (this.suffix === "'") {
-                                this.esParser.deleteChars(this.params);
-                            }
-                            break;
-
-                    }
+                    this._esParser.parse(chr, this.params, this.prefix, this.suffix);
 
                     this.params = [];
                     this.currentParam = 0;
@@ -685,6 +569,7 @@ export class Parser {
                             this.state = State.APC;
                             break;
 
+                        // https://en.wikipedia.org/wiki/ISO/IEC_2022#Code_structure
                         // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Controls-beginning-with-ESC
                         case C0.SP:
                             // ESC SP F  7-bit controls (S7C1T), VT220.
@@ -709,7 +594,7 @@ export class Parser {
                             // ESC % G   Select UTF-8 character set, ISO 2022.
                             this.gLevel = 0;
                             this.gCharset = 0;
-                            this.charsets[0] = CHARSETS.US;
+                            this.charsets[0] = charsets.US;
                             this.state = State.NORMAL;
                             i++;
                             break;
@@ -759,11 +644,17 @@ export class Parser {
                             this.state = State.NORMAL;
                             break;
                         case "=":
+                            // Set alternate keypad mode
                             // Application Keypad (DECKPAM).
+                            this._applicationKeypad = true;
+                            this._normalKeypad = false;
                             this.state = State.NORMAL;
                             break;
                         case ">":
+                            // Set numeric keypad mode
                             // Normal Keypad (DECKPNM), VT100.
+                            this._applicationKeypad = false;
+                            this._normalKeypad = true;
                             this.state = State.NORMAL;
                             break;
                         case "F":
@@ -807,6 +698,52 @@ export class Parser {
                 case State.IGNORE:
                     break;
                 case State.OSC:
+
+                    // States.OSC Ps ; Pt ST    ST ==> States.ESC \ String Terminator (ST  is 0x9c).
+                    // States.OSC Ps ; Pt BEL
+                    //   Set Text Parameters.
+                    // 上一个字符
+                    leftChr = text[i - 1];
+                    if ((leftChr === C0.ESC && chr === '\\') || chr === C0.BEL) {
+                        // 结束符
+                        if (leftChr === C0.ESC) {
+                            if (typeof this.currentParam === 'string') {
+                                this.currentParam = this.currentParam.slice(0, -1);
+                            } else if (typeof this.currentParam == 'number') {
+                                this.currentParam = (this.currentParam - ('\x1b'.charCodeAt(0) - 48)) / 10;
+                            }
+                        }
+
+                        this.params.push(this.currentParam);
+
+                        this.oscParser.parse(this.params);
+
+                        this.params = [];
+                        this.currentParam = 0;
+                        this.state = State.NORMAL;
+
+                    } else {
+
+                        if (!this.params.length) {
+                            if (chr >= '0' && chr <= '9') {
+                                this.currentParam =
+                                    this.currentParam * 10 + chr.charCodeAt(0) - 48;
+                            } else if (chr === ';') {
+                                this.params.push(this.currentParam);
+                                // 后面是字符串
+                                this.currentParam = '';
+                            } else {
+                                if (this.currentParam === 0) {
+                                    this.currentParam = '';
+                                }
+                                this.currentParam += chr;
+                            }
+                        } else {
+                            // pt
+                            this.currentParam += chr;
+                        }
+                    }
+
                     break;
                 case State.PM:
                     break;
@@ -814,10 +751,8 @@ export class Parser {
 
         }
 
-        this.terminal.viewport.appendChild(this.fragment);
-        this.fragment = document.createDocumentFragment();
-
-        this.flush();
+        this.printer.printBuffer();
+        this.terminal.scrollToBottomOnInput();
 
     }
 
@@ -829,20 +764,24 @@ export class Parser {
 
         if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(chr)) {
             // 双字节字符
-            // this.flush();
             // 超过字数自动换行
-            if (this.x > this.terminal.columns) {
+            if (this.x > this.activeBuffer.columns) {
                 this.newLine();
                 this.x = 1;
             }
 
             // 添加数据
             // 占用两个位置
-            let block = new DataBlock(chr, this.esParser.attribute);
+            let block = DataBlock.newBlock(chr, this._esParser.attribute);
             block.attribute.len2 = true;
-            this.buffer.get(this.y - 1)
-                .addOrUpdateBlock2(block, this.x)
-                .addOrUpdateBlock2(new PlaceholderBlock(), this.x + 1);
+
+            if(this.esParser.insertMode){
+                // 在光标的面前插入
+                this.activeBufferLine.insert(this.x, block, new PlaceholderBlock());
+            } else if(this.esParser.replaceMode){ // 默认
+                // 更新缓冲区的内容
+                this.activeBufferLine.replace(this.x, block, new PlaceholderBlock());
+            }
 
             this.x += 2;
 
@@ -853,223 +792,197 @@ export class Parser {
 
     }
 
+    /**
+     * 正向索引
+     * this.y += 1
+     * 1，如果超出滚动区域的底部的话，则滚动一行
+     * 2，如果没有超出滚动区域的话，并且如果行不存在的话，添加一行
+     */
+    private index(){
 
-    set gLevel(value: number) {
-        this._gLevel = value;
+        if (++this.y > this.activeBuffer.scrollBottom) {
+            this.y = this.activeBuffer.scrollBottom;
+            // 如果在底部
+            this.scrollUp();
+        } else {
+            if(!this.bufferSet.activeBuffer.get(this.y)){
+                this.newLine();
+            }
+        }
+
     }
 
-    set gCharset(value: number) {
-        this._gCharset = value;
+    /**
+     * 反向索引
+     * this.y -= 1
+     */
+    private reverseIndex(){
+
+        if (this.y <= this.activeBuffer.scrollTop) {
+            // 如果是在顶行...
+            this.scrollDown();
+        } else {
+            this.y--;
+        }
     }
 
-    private index(): void {
+    /**
+     * 下一行
+     * 如果行存在的话，则直接换行，否则创建新行。
+     */
+
+    private nextLine(){
+
+        // 滚筒上卷一行
+        if(this.y === this.activeBuffer.scrollBottom){
+            this.scrollUp();
+        } else {
+            //
+            this.y += 1;
+        }
 
     }
 
-    private nextLine(): void {
-
+    /**
+     * 保存光标
+     */
+    saveCursor() {
+        this.printer.printLine(this.activeBuffer.get(this.y));
+        this.activeBuffer.savedY = this.y;
+        this.activeBuffer.savedX = this.x;
     }
 
-    private reverseIndex(): void {
-
-    }
-
-    public saveCursor(): Parser {
-        return this;
-    }
-
-    public restoreCursor(): Parser {
-        return this;
+    /**
+     * 还原光标
+     */
+    restoreCursor() {
+        this.y = this.activeBuffer.savedY;
+        this.x = this.activeBuffer.savedX;
     }
 
     /**
      * 新建行
      */
-    private newLine(): void {
+    newLine(){
 
-        this.y++;
+        let line = this.activeBuffer.getBlankLine();
 
-        // 如果当前行不存在的话，则创建。
-        let chain = this.buffer.get(this.y - 1);
-        if (!chain) {
-            this.newBufferChain();
-        }
+        this.activeBuffer.append(line);
 
+        this.viewport.appendChild(line.element);
     }
 
-    private newPage() {
-
-    }
-
-
+    /**
+     * 更新缓冲区的内容
+     * @param chr
+     */
     private update(chr: string) {
 
-        if (this.x > this.terminal.columns) {
-            this.newLine();
+        // 当行内容超过指定的数量的时候，需要再次换行。
+        if (this.x > this.activeBuffer.columns) {
+            this.nextLine();
             // 光标重置
             this.x = 1;
         }
 
-        // 更新缓冲区的内容
-        this.buffer.get(this.y - 1).addOrUpdateBlock(chr, this.esParser.attribute, this.x++);
-    }
-
-    /**
-     * 刷新数据到元素中
-     * 刷新方式：通过判断当前缓冲区的所有脏链isDirty == true，
-     */
-    private flush(): void {
-
-        for (let i = 0; i < this.buffer.chainSize; i++) {
-            const chain = this.buffer.get(i);
-            if (!chain.isDirty) {
-                continue;
-            }
-
-            // 刷新脏链数据
-            let leftBlockClass: string = "",
-                html: string = "",
-                str: string = "",
-                el: string = "";
-
-
-            for (let i = 1; i < chain.blockSize; i++) {
-
-                let block = chain.getDataBlock(i);
-                if (block instanceof PlaceholderBlock) {
-                    continue;
-                }
-
-                // 特殊字符处理。
-                switch (block.data) {
-                    case ' ':
-                        block.data = '&nbsp;';
-                        break;
-                    case '>':
-                        block.data = '&gt;';
-                        break;
-                    case '<':
-                        block.data = '&lt;';
-                        break;
-                    case '\t':
-                        block.attribute.tab = true;
-                        break;
-                }
-
-
-                // 1，当前字符有样式
-                // 2，当前字符样式和上一个字符样式不一样。
-                // 3，当前字符样式含有len2(由于间隙问题，要求每一个字符一个span存储)
-                // 4，当前字符不存在样式。
-                const className = block.getClassName();
-                if (!!className) {
-
-                    if (leftBlockClass === className) {
-                        // 上一个字符和当前字符样式相等。
-                        if (block.attribute.len2) {
-                            // 结束上一个字符，如果含有样式
-
-                            if (!!el) {
-                                html += el + str + "</span>";
-                                str = "";
-                                el = "";
-                            }
-
-                            html += `<span class="${className}">${block.data}</span>`;
-
-                        } else {
-                            if (el === "") {
-                                el = `<span class="${className}">`;
-                            }
-
-                            str += block.data;
-                        }
-
-                    } else {
-                        // 上一个字符和当前字符样式不相等。
-                        // 结束上一个字符，如果含有样式
-                        if (!!el) {
-                            html += el + str + "</span>";
-                            str = "";
-                            el = "";
-                        }
-
-                        if (block.attribute.len2) {
-                            // 结束上一个字符，如果含有样式
-                            html += `<span class="${className}">${block.data}</span>`;
-                        } else {
-                            if (el === "") {
-                                el = `<span class="${className}">`;
-                            }
-                            str += block.data;
-                        }
-
-                    }
-
-                } else {
-                    // 结束上一个字符，如果含有样式
-                    if (!!el) {
-                        html += el + str + "</span>";
-                        str = "";
-                        el = "";
-                    }
-
-                    // 当前字符没有样式
-                    html += block.data;
-                }
-
-                leftBlockClass = className;
-            }
-
-            if (!!str) {
-                if (!!el) {
-                    html += el + str + "</span>";
-                    str = "";
-                    el = "";
-                }
-            }
-
-            chain.flush(html);
-
+        let block = DataBlock.newBlock(chr, this._esParser.attribute);
+        if(this.esParser.insertMode){
+            // 在光标的面前插入
+            this.activeBufferLine.insert(this.x, block);
+        } else if(this.esParser.replaceMode){ // 默认
+            // 更新缓冲区的内容
+            this.activeBufferLine.replace(this.x, block);
+            this.x += 1;
         }
 
     }
 
-    public getBuffer(): ScreenBuffer {
-        return this.buffer;
+    /**
+     * 创建一行，需要在滚动底部删除一行。
+     */
+    insertLine(){
+
+        let line = this.activeBuffer.getBlankLine();
+        // 正向索引
+        // 在指定的位置插入一行
+        let afterNode = this.activeBuffer.insert(this.y, line)[0];
+        this.viewport.insertBefore(line.element, afterNode);
+
+        // 删除底部的行
+        this.activeBuffer.delete(this.activeBuffer.scrollBottom, 1, false);
+
     }
 
     /**
-     * 创建一行
+     * 删除一行，需要在滚动底部填充一行。
      */
-    public insertLine(): void {
+    deleteLine(){
 
-    }
+        let line = this.activeBuffer.getBlankLine();
 
-    /**
-     * 删除一行
-     */
-    public deleteLine(): void {
+        // 在光标的位置删除行
+        this.activeBuffer.delete(this.y, 1, false);
+
+        let afterNode = this.activeBuffer.insert(this.activeBuffer.scrollBottom, line)[0];
+
+        if(this.activeBuffer.scrollBottom === this.terminal.rows){
+            // 在底部添加
+            this.viewport.appendChild(line.element);
+        } else {
+            // 在后一行插入前
+            this.viewport.insertBefore(line.element, afterNode);
+        }
 
     }
 
     /**
      * 向上滚动（可以查看下面的内容）
      * 原理：底部添加行，顶部删除行
-     * @param n 滚动行数
-     * @param initChars 是否需要填充空格(&nbsp;)
      */
-    public scrollUp(n: number, initChars: boolean): void {
+    scrollUp(){
+
+        let line = this.activeBuffer.getBlankLine();
+
+        if(this.activeBuffer.scrollBottom === this.terminal.rows){
+            // 在底部添加
+            this.activeBuffer.append(line);
+            this.viewport.appendChild(line.element);
+        } else {
+            // 在后一行插入前
+            // 在底行添加空行
+            // rows = 24, scrollBottom = 24, y = 24
+            const y = this.activeBuffer.scrollBottom + 1;
+            let afterNode = this.activeBuffer.insert(y, line)[0];
+            this.viewport.insertBefore(line.element, afterNode);
+        }
+
+        // 删除顶行
+        // 如果是应用程序的话，则删除。
+        const saveLines = !(this.applicationKeypad || this.esParser.applicationCursorKeys);
+        const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, saveLines);
+        if(saveLines){
+            for(let savedLine of savedLines){
+                this.printer.printLine(savedLine, false);
+            }
+        }
 
     }
 
     /**
      * 向下滚动（可以查看上面的内容）
      * 原理：顶部添加行，底部删除行
-     * @param n
-     * @param initChars
      */
-    public scrollDown(n: number, initChars: boolean): void {
+    scrollDown(){
+
+        let line = this.activeBuffer.getBlankLine();
+        // 删除底行
+        this.activeBuffer.delete(this.activeBuffer.scrollBottom, 1, false);
+
+        // 顶部添加行
+        let afterNode = this.activeBuffer.insert(this.activeBuffer.scrollTop, line)[0];
+
+        this.viewport.insertBefore(line.element, afterNode);
+
 
     }
 

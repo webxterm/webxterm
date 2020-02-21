@@ -1,41 +1,68 @@
+import {DataBlockAttribute} from "./DataBlockAttribute";
+import {Block} from "./Block";
+import {BufferLine} from "./BufferLine";
+
 /**
  * 缓冲区数据块
  */
-import {Block} from "./Block";
-import {DataBlockAttribute} from "./DataBlockAttribute";
-
 export class DataBlock implements Block {
 
     // 数据
-    private value: string = "";
+    private _data: string = " ";
 
-    private attr: DataBlockAttribute;
+    // 属性
+    private _attribute: DataBlockAttribute = new DataBlockAttribute();
 
     // 数据更新版本号，默认为0，每次数据更新的时候，都会+1
-    private version = 0;
+    private _version: number = 0;
 
-    constructor(data: string = "", attr: DataBlockAttribute) {
-        this.data = data;
-        this.attr = new DataBlockAttribute();
-        // this.attribute = JSON.parse(JSON.stringify(attr));
-        this.copyValue(attr);
+    // 是否为空，默认生成就是空的，当调用data设置数据的时候，
+    private _empty: boolean = true;
+
+    /**
+     * 创建新块
+     * @param data
+     * @param attr
+     */
+    static newBlock(data: string, attr: DataBlockAttribute){
+        let block = new DataBlock();
+        block.data = data;
+        block.copyValue(attr);
+        return block;
+    }
+
+    static newEmptyBlock(){
+        return new DataBlock();
+    }
+
+    get empty(): boolean {
+        return this._empty;
     }
 
     get data(): string {
-        return this.value;
+        return this._data;
     }
 
     set data(value: string) {
-        this.value = value;
-        this.version++;
+        this._data = value;
+        this._empty = false;
+        this._version++;
     }
 
     get attribute(): DataBlockAttribute {
-        return this.attr;
+        return this._attribute;
     }
 
     set attribute(value: DataBlockAttribute) {
-        this.attr = value;
+        this._attribute = value;
+    }
+
+    get version(): number {
+        return this._version;
+    }
+
+    set version(value: number) {
+        this._version = value;
     }
 
     /**
@@ -49,54 +76,47 @@ export class DataBlock implements Block {
         this.copyValue(attr);
     }
 
-    public copyValue(attr: DataBlockAttribute) : void {
+    public copyValue(attr: DataBlockAttribute): void {
 
-        this.attribute.backgroundColor = attr.backgroundColor;
-        this.attribute.color = attr.color;
-        this.attribute.bold = attr.bold;
-        this.attribute.crossedOut = attr.crossedOut;
-        this.attribute.inverse = attr.inverse;
-        this.attribute.invisible = attr.invisible;
-        this.attribute.italic = attr.italic;
-        this.attribute.len2 = attr.len2;
-        this.attribute.rapidBlink = attr.rapidBlink;
-        this.attribute.slowBlink = attr.slowBlink;
-        this.attribute.tab = attr.tab;
-        this.attribute.underline = attr.underline;
+        this._attribute.backgroundColorClass = attr.backgroundColorClass;
+        this._attribute.colorClass = attr.colorClass;
+        this._attribute.bold = attr.bold;
+        this._attribute.crossedOut = attr.crossedOut;
+        this._attribute.inverse = attr.inverse;
+        this._attribute.invisible = attr.invisible;
+        this._attribute.italic = attr.italic;
+        this._attribute.len2 = attr.len2;
+        this._attribute.rapidBlink = attr.rapidBlink;
+        this._attribute.slowBlink = attr.slowBlink;
+        this._attribute.tab = attr.tab;
+        this._attribute.underline = attr.underline;
 
     }
 
     /**
      * 通过attribute解析出class
      */
-    public getClassName() : string {
+    public getClassName(): string {
 
         let value = [
-            this.attribute.backgroundColor,
-            this.attribute.color
+            this._attribute.backgroundColorClass,
+            this._attribute.colorClass
         ];
 
-        if(this.attribute.bold) value.push("bold");
-
-        if(this.attribute.crossedOut) value.push("crossed-out");
-
-        if(this.attribute.inverse) value.push("inverse");
-
-        if(this.attribute.invisible) value.push("invisible");
-
-        if(this.attribute.italic) value.push("italic");
-
-        if(this.attribute.len2) value.push("len2");
-
-        if(this.attribute.rapidBlink) value.push("rapid-blink");
-
-        if(this.attribute.slowBlink) value.push("slow-blink");
-
-        if(this.attribute.underline) value.push("underline");
-
-        if(this.attribute.tab) value.push("tab");
+        if (this._attribute.bold) value.push("bold");
+        if (this._attribute.crossedOut) value.push("crossed-out");
+        if (this._attribute.inverse) value.push("inverse");
+        if (this._attribute.invisible) value.push("invisible");
+        if (this._attribute.italic) value.push("italic");
+        if (this._attribute.len2) value.push("len2");
+        if (this._attribute.rapidBlink) value.push("rapid-blink");
+        if (this._attribute.slowBlink) value.push("slow-blink");
+        if (this._attribute.underline) value.push("underline");
+        if (this._attribute.tab) value.push("tab");
+        if(this._attribute.faint) value.push("faint");
 
         return value.join(" ").trim();
     }
+
 
 }

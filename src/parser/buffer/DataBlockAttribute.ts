@@ -1,149 +1,149 @@
-import {CommonUtils} from "../../common/CommonUtils";
-
+/**
+ * 数据块的属性
+ */
 export class DataBlockAttribute {
 
     // 是否为\t
-    private isTab: boolean = false;
+    private _tab: boolean = false;
 
     // 是否为双字节字符，/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(chr)
-    private isLen2: boolean = false;
+    private _len2: boolean = false;
 
     // 加粗
-    private isBold: boolean = false;
+    private _bold: boolean = false;
 
     // 强度降低
-    private isFaint: boolean = false;
+    private _faint: boolean = false;
 
     // 斜体
-    private isItalic: boolean = false;
+    private _italic: boolean = false;
 
     // 下划线
-    private isUnderline: boolean = false;
+    private _underline: boolean = false;
 
     // Slow Blink, less than 150 per minute
-    private isSlowBlink: boolean = false;
+    private _slowBlink: boolean = false;
 
     // MS-DOS ANSI.SYS; 150+ per minute; not widely supported
-    private isRapidBlink: boolean = false;
+    private _rapidBlink: boolean = false;
 
     // 反转 reverse video, swap foreground and background colors
-    private isInverse: boolean = false;
+    private _inverse: boolean = false;
 
     // 隐藏
-    private isInvisible: boolean = false;
+    private _invisible: boolean = false;
 
     // 删除线
-    private isCrossedOut: boolean = false;
+    private _crossedOut: boolean = false;
 
     // 颜色class
-    private colorClass: string = "";
+    private _colorClass: string = "";
 
     // 背景颜色class
-    private backgroundColorClass: string = "";
+    private _backgroundColorClass: string = "";
 
-    id: string = CommonUtils.getUUID();
 
     get tab(): boolean {
-        return this.isTab;
+        return this._tab;
     }
 
     set tab(value: boolean) {
-        this.isTab = value;
+        this._tab = value;
     }
 
     get len2(): boolean {
-        return this.isLen2;
+        return this._len2;
     }
 
     set len2(value: boolean) {
-        this.isLen2 = value;
+        this._len2 = value;
     }
 
     get bold(): boolean {
-        return this.isBold;
+        return this._bold;
     }
 
     set bold(value: boolean) {
-        this.isBold = value;
+        this._bold = value;
     }
 
     get faint(): boolean {
-        return this.isFaint;
+        return this._faint;
     }
 
     set faint(value: boolean) {
-        this.isFaint = value;
+        this._faint = value;
     }
 
     get italic(): boolean {
-        return this.isItalic;
+        return this._italic;
     }
 
     set italic(value: boolean) {
-        this.isItalic = value;
+        this._italic = value;
     }
 
     get underline(): boolean {
-        return this.isUnderline;
+        return this._underline;
     }
 
     set underline(value: boolean) {
-        this.isUnderline = value;
+        this._underline = value;
     }
 
     get slowBlink(): boolean {
-        return this.isSlowBlink;
+        return this._slowBlink;
     }
 
     set slowBlink(value: boolean) {
-        this.isSlowBlink = value;
+        this._slowBlink = value;
     }
 
     get rapidBlink(): boolean {
-        return this.isRapidBlink;
+        return this._rapidBlink;
     }
 
     set rapidBlink(value: boolean) {
-        this.isRapidBlink = value;
+        this._rapidBlink = value;
     }
 
     get inverse(): boolean {
-        return this.isInverse;
+        return this._inverse;
     }
 
     set inverse(value: boolean) {
-        this.isInverse = value;
+        this._inverse = value;
     }
 
     get invisible(): boolean {
-        return this.isInvisible;
+        return this._invisible;
     }
 
     set invisible(value: boolean) {
-        this.isInvisible = value;
+        this._invisible = value;
     }
 
     get crossedOut(): boolean {
-        return this.isCrossedOut;
+        return this._crossedOut;
     }
 
     set crossedOut(value: boolean) {
-        this.isCrossedOut = value;
+        this._crossedOut = value;
     }
 
-    get color(): string {
-        return this.colorClass;
+    get colorClass(): string {
+        return this._colorClass;
     }
 
-    set color(value: string) {
-        this.colorClass = value;
+    set colorClass(value: string) {
+        this._colorClass = value;
     }
 
-    get backgroundColor(): string {
-        return this.backgroundColorClass;
+    get backgroundColorClass(): string {
+        return this._backgroundColorClass;
     }
 
-    set backgroundColor(value: string) {
-        this.backgroundColorClass = value;
+    set backgroundColorClass(value: string) {
+        this._backgroundColorClass = value;
     }
 }

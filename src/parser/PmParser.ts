@@ -1,7 +1,7 @@
 import {Terminal} from "../Terminal";
 import {Parser} from "./Parser";
 
-export class ApcParser {
+export class PmParser {
 
     private terminal: Terminal;
     private parser: Parser;
@@ -12,7 +12,7 @@ export class ApcParser {
     }
 
     /**
-     * 解析Apc参数
+     * 解析Pm参数
      * @param params
      */
     parse(params: any[]) {

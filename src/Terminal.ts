@@ -9,16 +9,13 @@ import {Styles} from "./Styles";
 import {Transceiver} from "./Transceiver";
 import {Parser} from "./parser/Parser";
 import {EventHandler} from "./EventHandler";
-
-export enum FocusTarget {
-    CONTAINER,  // 容器
-    CLIPBOARD   // 粘贴板
-}
+import {Cursor} from "./Cursor";
+import {Printer} from "./Printer";
 
 export class Terminal {
 
-    private _preferences: Preferences;
-    private eventMap: { [key: string]: any } = {};
+    private readonly _preferences: Preferences;
+    private _eventMap: { [key: string]: any } = {};
 
     // 终端实例
     private readonly instance: HTMLElement;
@@ -61,15 +58,22 @@ export class Terminal {
     // Websocket服务器
     private readonly wsServer: string;
 
-    private transceiver: Transceiver | undefined;
+    private _transceiver: Transceiver | undefined;
 
     // 消息队列定时器
     private messageQueueTimer: number = 0;
 
-    private parser: Parser;
+    private readonly _parser: Parser;
     private eventHandler: EventHandler;
 
-    private _focusTarget: FocusTarget = FocusTarget.CONTAINER;
+    private readonly _cursor: Cursor;
+
+    private _scrollToBottom: boolean = true;
+
+    // 是否已经初始化
+    public init: boolean = false;
+
+    private _printer: Printer;
 
     constructor(args: { [key: string]: any }) {
         const now = new Date();
@@ -80,26 +84,32 @@ export class Terminal {
         this.onRender = args["render"];
         this.wsServer = args["wsServer"];
 
+        // 光标
+        this._cursor = new Cursor(this._instanceId);
+
         this._preferences = new Preferences(this);
         this._preferences.init();
 
         this.initViewPort();
 
-        this.parser = new Parser(this);
-        this.eventHandler = new EventHandler(this);
-        this.eventHandler.listen();
+        this._parser = new Parser(this);
+        this.eventHandler = new EventHandler();
+        this.eventHandler.listen(this);
+
+        this._printer = new Printer(this);
+
     }
 
     // 回调函数绑定
     on(typeName: string | { [key: string]: any }, listener?: (args: object) => void): Terminal {
         if (typeof typeName === 'string') {
             if (listener) {
-                this.eventMap[typeName] = listener;
+                this._eventMap[typeName] = listener;
             }
         } else if (typeof typeName === 'object') {
             for (let key in typeName) {
                 const sk = key + "";
-                this.eventMap[sk] = typeName[sk];
+                this._eventMap[sk] = typeName[sk];
             }
         }
 
@@ -137,18 +147,17 @@ export class Terminal {
         this._presentation.appendChild(this._clipboard);
         this._clipboard.className = "clipboard";
 
-        // 默认字符大小
-        // this.charWidth = 9.633331298828125;
-        // this.charHeight = 19;
-        this.charWidth = 6.4166717529296875;
-        this.charHeight = 13;
 
+        // 默认字符大小
+        [this.charWidth, this.charHeight] = Preferences.fontSizes[Preferences.defaultFontSize];
 
         // 渲染完成
         this.onRender({
             'type': 'render',
             'instance': this
         });
+
+        this.init = true;
 
         if (!document.body) {
             setTimeout(() => {
@@ -210,11 +219,26 @@ export class Terminal {
         return this._instanceId;
     }
 
-    set focusTarget(value: FocusTarget) {
-        this._focusTarget = value;
+    get parser(): Parser {
+        return this._parser;
     }
 
 
+    get printer(): Printer {
+        return this._printer;
+    }
+
+    set scrollToBottom(value: boolean) {
+        this._scrollToBottom = value;
+    }
+
+    get preferences(): Preferences {
+        return this._preferences;
+    }
+
+    get eventMap(): { [p: string]: any } {
+        return this._eventMap;
+    }
 
     /**
      * 获取字符的宽度和高度
@@ -230,6 +254,45 @@ export class Terminal {
         this.charWidth = rect.width;
         this.charHeight = rect.height;
 
+        console.info('修改尺寸：' + this.rows + "," + this.columns);
+
+        this.resizeRemote();
+
+    }
+
+    /**
+     * 重置窗口大小
+     */
+    resizeWindow() {
+
+        this.viewport.appendChild(this.measureDiv);
+        const width = this.measureDiv.getBoundingClientRect().width;
+        this._columns = Math.floor(width / this._charWidth);
+        this.measureDiv.remove();
+
+        // 计算高度
+        const height = this.container.getBoundingClientRect().height;
+        this._rows = Math.floor(height / this._charHeight);
+
+        this.resizeRemote();
+
+    }
+
+    /**
+     * 重置终端大小
+     */
+    resizeRemote(){
+
+        // 设置宽度
+        if(this.transceiver){
+            this.parser.bufferSet.resize(this.rows, this.columns);
+            this.transceiver.send(JSON.stringify({
+                size: {
+                    w: this.columns,
+                    h: this.rows
+                }
+            }));
+        }
     }
 
     /**
@@ -244,8 +307,9 @@ export class Terminal {
 
         console.info("value:" + value);
 
-        let rowRect = this.measureDiv.getBoundingClientRect();
-        this._columns = Math.floor(rowRect.width / value);
+        const width = this.measureDiv.getBoundingClientRect().width;
+        this._columns = Math.floor(width / value);
+
         // let paddingRight = rowRect.width - this._columns * value;
 
         // Styles.add(".viewport", {
@@ -268,6 +332,14 @@ export class Terminal {
         return this._rows;
     }
 
+    get cursor(): Cursor {
+        return this._cursor;
+    }
+
+    get transceiver(): Transceiver | undefined {
+        return this._transceiver;
+    }
+
     /**
      * 修改字符高度
      * @param value
@@ -284,6 +356,15 @@ export class Terminal {
             "height": value + "px",
             "line-height": value + "px"
         }, this._instanceId);
+
+        // 计算高度
+        const height = this.container.getBoundingClientRect().height;
+        this._rows = Math.floor(height / value);
+
+        Styles.add(".presentation", {
+            "height": (height - this._rows * value) + "px"
+        }, this._instanceId);
+
     }
 
 
@@ -302,13 +383,13 @@ export class Terminal {
                 pkey: string = ""): Terminal {
 
 
-        this.transceiver = new Transceiver(this.wsServer, this);
-        this.transceiver.open().then((e: any) => {
+        this._transceiver = new Transceiver(this.wsServer, this);
+        this._transceiver.open().then((e: any) => {
             console.info(e);
             // 连接成功
 
-            if(this.transceiver){
-                this.transceiver.send(JSON.stringify({
+            if(this._transceiver){
+                this._transceiver.send(JSON.stringify({
                     target: {
                         hostname: hostname,
                         username: username,
@@ -317,9 +398,9 @@ export class Terminal {
                     },
                     size: {
                         w: this.columns,
-                        h: 24
+                        h: this.rows
                     },
-                    term: 'xterm',
+                    term: this.preferences.terminalType,
                     type: '!sftp'
                 }));
             }
@@ -347,7 +428,7 @@ export class Terminal {
         //
         console.info("echo:" + text);
 
-        this.parser.parse(text);
+        this._parser.parse(text);
 
 
     }
@@ -361,9 +442,9 @@ export class Terminal {
 
         this.messageQueueTimer = setInterval(() => {
 
-            if(this.transceiver) {
+            if(this._transceiver) {
 
-                let chunk = this.transceiver.chunk;
+                let chunk = this._transceiver.chunk;
 
                 if (chunk.length > 0) {
                     this.echo(chunk.join(""));
@@ -380,7 +461,11 @@ export class Terminal {
     }
 
     public focus(): void {
+        this._cursor.focus = true;
+    }
 
+    public blur(): void {
+        this._cursor.focus = false;
     }
 
     public reverseVideo() : void {
@@ -392,15 +477,23 @@ export class Terminal {
     }
 
     public showCursor() : void {
-
+        this._cursor.show = true;
+        // 处理当前的光标
     }
 
     public hideCursor(): void {
+        this._cursor.show = false;
+    }
 
+    public scrollToBottomOnInput(): void {
+        if(this._preferences.scrollToBottomOnInput && this._scrollToBottom){
+            this.container.scrollTop = this.container.scrollHeight;
+        }
+    }
+
+    public pushViewport(el: HTMLElement){
+        this.viewport.appendChild(el);
     }
 
 
-    get preferences(): Preferences {
-        return this._preferences;
-    }
 }

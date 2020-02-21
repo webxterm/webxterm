@@ -32,6 +32,13 @@ export class Styles {
         [scoped: string]: HTMLElement
     } = {};
 
+    // 动画
+    private keyframes: {
+        [scoped: string]: {
+            [name: string]: string
+        }
+    } = {};
+
     private static _instance: Styles = new Styles();
 
     public static getStyles(): Styles {
@@ -68,7 +75,7 @@ export class Styles {
      * @param css 样式
      * @param instance 属性选择器(应用范围)
      */
-    public put(selector: string, css: { [key: string]: string }, instance: string = ""): Styles {
+    public put(selector: string, css: { [key: string]: string }, instance: string = "__global__"): Styles {
 
         if (!!instance) {
             // 属性选择器
@@ -86,7 +93,7 @@ export class Styles {
 
         } else {
 
-            return this.put(selector, css, "__global__");
+            return this.put(selector, css, instance);
 
         }
 
@@ -103,7 +110,7 @@ export class Styles {
      * @param instance 属性选择器(应用范围)
      * @param replace 是否替换全部
      */
-    public put2(selector: string, css: { [key: string]: string }, instance: string, replace: boolean = false): Styles {
+    public put2(selector: string, css: { [key: string]: string }, instance: string = "__global__", replace: boolean = false): Styles {
 
         if (!instance || instance === "") return this;
 
@@ -119,7 +126,7 @@ export class Styles {
             _css[key + ""] = css[key + ""];
         }
 
-        this.update();
+        this.update2();
 
         return this;
     }
@@ -150,7 +157,14 @@ export class Styles {
                     _selector = "";
                 }
 
-                cssHTML += ".webxterm[instance=\"" + _scoped + "\"] " + _selector + "{";
+                if(_scoped !== "__global__"){
+                    cssHTML += ".webxterm[instance=\"" + _scoped + "\"] ";
+                } else {
+                    cssHTML += ".webxterm ";
+                }
+
+                cssHTML += _selector + "{";
+
                 for (const key in _selectorObj) {
                     const _key = key + "";
                     const value = _selectorObj[_key];
@@ -160,11 +174,44 @@ export class Styles {
                 cssHTML += "} ";
             }
 
+            // 动画
+            let keyframes = this.keyframes[_scoped];  // {}
+            for(const name in keyframes){
+                const value = " " + keyframes[name + ""];
+                let scoped2 = "";
+
+                if(_scoped !== "__global__"){
+                    scoped2 = "-" + _scoped;
+                }
+                cssHTML += "@keyframes " + name + scoped2 + value;
+                cssHTML += "@-moz-keyframes " + name + scoped2 + value; // Firefox
+                cssHTML += "@-o-keyframes " + name + scoped2 + value; // Opera
+                cssHTML += "@-webkit-keyframes " + name + scoped2 + value;  // Safari Chrome
+            }
+
+            this.els[_scoped].innerHTML = cssHTML;
+        }
+
+    }
+
+    public update2(): void {
+
+        for(const scoped in this.cursorCssObj){
+            const _scoped = scoped + "";
             const _scopeCursorObj = this.cursorCssObj[_scoped];
+
+            if (!this.els[_scoped + "-cursor"]) {
+                this.els[_scoped + "-cursor"] = document.createElement("style");
+                this.els[_scoped + "-cursor"].setAttribute("type", "text/css");
+                this.els[_scoped + "-cursor"].setAttribute("_ins", _scoped + "-cursor");
+                if (this.head) this.head.appendChild(this.els[_scoped + "-cursor"]);
+            }
+
+            let cssHTML = "";
 
             for(const selector in _scopeCursorObj){
                 let _selector = selector + "";
-                const _selectorObj = _scopedObj[_selector];
+                const _selectorObj = _scopeCursorObj[_selector];
 
                 if (_selector === ".webxterm") {
                     _selector = "";
@@ -180,10 +227,36 @@ export class Styles {
                 cssHTML += "} ";
             }
 
-            this.els[_scoped].innerHTML = cssHTML;
+            this.els[_scoped + "-cursor"].innerHTML = cssHTML;
         }
 
     }
 
+    /**
+     * 添加动画
+     * @param instance
+     * @param name
+     * @param value
+     */
+    static addKeyFrames(name: string, value: string, instance: string = "__global__") {
+        Styles.getStyles().putKeyFrame(instance, name, value);
+    }
 
+
+    /**
+     * 添加动画
+     * @param instance
+     * @param name
+     * @param value
+     */
+    public putKeyFrame(instance: string, name: string, value: string): void {
+
+        if (!this.keyframes[instance]) {
+            this.keyframes[instance] = {};
+        }
+
+        this.keyframes[instance][name] = value;
+
+        this.update();
+    }
 }
