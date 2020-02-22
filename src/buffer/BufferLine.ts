@@ -6,7 +6,7 @@ import {Block} from "./Block";
 import {PlaceholderBlock} from "./PlaceholderBlock";
 import {Buffer} from "./Buffer";
 import {DataBlockAttribute} from "./DataBlockAttribute";
-import {Printer} from "../../Printer";
+import {Printer} from "../Printer";
 
 export class BufferLine {
 

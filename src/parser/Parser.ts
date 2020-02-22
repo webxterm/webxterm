@@ -1,12 +1,12 @@
 import {Terminal} from "../Terminal";
 import {EscapeSequenceParser} from "./EscapeSequenceParser";
-import {BufferLine} from "./buffer/BufferLine";
-import {Buffer} from "./buffer/Buffer";
-import {DataBlock} from "./buffer/DataBlock";
+import {BufferLine} from "../buffer/BufferLine";
+import {Buffer} from "../buffer/Buffer";
+import {DataBlock} from "../buffer/DataBlock";
 import {OscParser} from "./OscParser";
 import {Printer} from "../Printer";
-import {PlaceholderBlock} from "./buffer/PlaceholderBlock";
-import {BufferSet} from "./buffer/BufferSet";
+import {PlaceholderBlock} from "../buffer/PlaceholderBlock";
+import {BufferSet} from "../buffer/BufferSet";
 
 // http://www.inwap.com/pdp10/ansicode.txt
 // https://vt100.net/docs/vt102-ug/table5-13.html
@@ -130,9 +130,6 @@ export class Parser {
 
     private charsets: null[] | object[] = [null];
 
-    // 缓冲区
-    private readonly _bufferSet: BufferSet;
-
     // 当前终端
     private terminal: Terminal;
 
@@ -158,17 +155,8 @@ export class Parser {
 
         this.terminal = terminal;
 
-        // 设置活跃缓冲区为当前的默认缓冲区
-        this._bufferSet = new BufferSet(this.terminal.rows, this.terminal.columns);
-        let fragment = this._bufferSet.activeBuffer.fillRows();
-        this.viewport.appendChild(fragment);
-        // this._bufferSet.activeBufferLine.element.setAttribute("used", "true");
-
-        //
         this._esParser = new EscapeSequenceParser(terminal, this);
         this.oscParser = new OscParser(terminal, this);
-
-
 
     }
 
@@ -181,9 +169,7 @@ export class Parser {
     }
 
     set x(value: number){
-        if(value > this.terminal.columns){
-            value = this.terminal.columns;
-        } else if(value < 1){
+        if(value < 1){
             value = 1;
         }
 
@@ -208,10 +194,8 @@ export class Parser {
         this.activeBufferLine.dirty = true;
     }
 
-
-
     get bufferSet(): BufferSet {
-        return this._bufferSet;
+        return this.terminal.bufferSet;
     }
 
     get printer(): Printer {
@@ -255,13 +239,7 @@ export class Parser {
      */
     activateAltBuffer() {
         this.bufferSet.activateAltBuffer();
-
-        let fragment = document.createDocumentFragment();
-        const lines = this.bufferSet.activeBuffer.lines;
-        for(let i = 0, len = lines.length; i < len; i++){
-            fragment.appendChild(lines[i].element);
-        }
-        this.viewport.appendChild(fragment);
+        this.terminal.addBufferFillRows();
     }
 
     /**
@@ -839,6 +817,7 @@ export class Parser {
         } else {
             //
             this.y += 1;
+
         }
 
     }
@@ -879,6 +858,9 @@ export class Parser {
     private update(chr: string) {
 
         // 当行内容超过指定的数量的时候，需要再次换行。
+        if(this.x == 98){
+            console.info('......');
+        }
         if (this.x > this.activeBuffer.columns) {
             this.nextLine();
             // 光标重置
@@ -957,13 +939,10 @@ export class Parser {
         }
 
         // 删除顶行
-        // 如果是应用程序的话，则删除。
-        const saveLines = !(this.applicationKeypad || this.esParser.applicationCursorKeys);
-        const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, saveLines);
-        if(saveLines){
-            for(let savedLine of savedLines){
-                this.printer.printLine(savedLine, false);
-            }
+        // 如果是备用缓冲区的话，就删除顶行。
+        const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, true);
+        for(let savedLine of savedLines){
+            this.printer.printLine(savedLine, false);
         }
 
     }

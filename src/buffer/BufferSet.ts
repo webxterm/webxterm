@@ -1,6 +1,8 @@
 import {Buffer} from "./Buffer";
 import {BufferLine} from "./BufferLine";
-import {Printer} from "../../Printer";
+import {DataBlock} from "./DataBlock";
+
+// http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-The-Alternate-Screen-Buffer
 
 export class BufferSet {
 
@@ -10,13 +12,14 @@ export class BufferSet {
 
     constructor(rows: number, columns: number) {
 
+        // 默认缓冲区
         this._normal = new Buffer(rows, columns, true, "normal");
+        this._normal.fillRows();
 
-        // http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-The-Alternate-Screen-Buffer
+        // 备用缓冲区
         this._alt = new Buffer(rows, columns, false, "alt");
         this._alt.fillRows();
         this._activeBuffer = this._normal;
-
 
     }
 
@@ -34,6 +37,10 @@ export class BufferSet {
 
     get activeBufferLine(): BufferLine {
         return this._activeBuffer.get(this._activeBuffer.y);
+    }
+
+    get size(): number {
+        return this._activeBuffer.lines.length;
     }
 
     /**
@@ -93,5 +100,36 @@ export class BufferSet {
      */
     clearSavedLines(){
         this._normal.clearSavedLines();
+    }
+
+    /**
+     * 生成日志
+     * 打印所有行
+     * 保存的行和缓冲区的行
+     */
+    printAllLines(){
+
+        let strings = "";
+        
+        function printLine(line: BufferLine) {
+            let str = "";
+            for(let block of line.blocks){
+                if(block instanceof DataBlock){
+                    str += block.data;
+                }
+            }
+            return str + "\r\n";
+        }
+
+        for(let savedLine of this._normal.savedLines){
+            strings += printLine(savedLine);
+        }
+
+        for(let bufferLine of this.activeBuffer.lines){
+            strings += printLine(bufferLine);
+        }
+
+        return strings;
+
     }
 }

@@ -218,6 +218,8 @@ export class Buffer {
                     this._savedLines.splice(0, 1)[0].element.remove();
                 }
             } else {
+                // 不是备用缓冲区或不需要保存行。
+                // 直接将其元素删除。
                 lines[i].element.remove();
             }
         }

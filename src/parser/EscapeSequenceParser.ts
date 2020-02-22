@@ -1,13 +1,13 @@
 import {Terminal} from "../Terminal";
 import {Parser} from "./Parser";
-import {DataBlock} from "./buffer/DataBlock";
-import {BufferLine} from "./buffer/BufferLine";
-import {DataBlockAttribute} from "./buffer/DataBlockAttribute";
+import {DataBlock} from "../buffer/DataBlock";
+import {BufferLine} from "../buffer/BufferLine";
+import {DataBlockAttribute} from "../buffer/DataBlockAttribute";
 import {CommonUtils} from "../common/CommonUtils";
 import {Preferences} from "../Preferences";
 import {Styles} from "../Styles";
-import {PlaceholderBlock} from "./buffer/PlaceholderBlock";
-import {Buffer} from "./buffer/Buffer";
+import {PlaceholderBlock} from "../buffer/PlaceholderBlock";
+import {Buffer} from "../buffer/Buffer";
 
 
 // 8-bit
@@ -601,18 +601,12 @@ export class EscapeSequenceParser {
             // 如果是默认缓冲区的话，就滚动。
             scrollBack = this.parser.bufferSet.isNormal;
 
-            // 检查是否有空行
-            // for(let i = 0, len = this.activeBuffer.lines.length; i < len; i++){
-            //     let line = this.activeBuffer.lines[i];
-            //     if(!line.element.getAttribute("used")){
-            //         line.element.remove();
-            //     }
-            // }
-
         }
 
-        for (let i = begin; i <= end; i++) {
+        for (let y = begin; y <= end; y++) {
+
             if (scrollBack) {
+
                 // 删除第一行
                 const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, scrollBack);
                 for(let savedLine of savedLines){
@@ -625,8 +619,7 @@ export class EscapeSequenceParser {
                 fragment.appendChild(line.element);
 
             } else {
-                // 判断行是否存在
-                const line = this.activeBuffer.get(i);
+                const line = this.activeBuffer.get(y);
                 // 删除数据
                 line.dirty = true;
                 // 抹除当前行，抹除当前链数据

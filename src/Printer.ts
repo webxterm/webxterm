@@ -1,8 +1,8 @@
-import {BufferLine} from "./parser/buffer/BufferLine";
+import {BufferLine} from "./buffer/BufferLine";
 import {Parser} from "./parser/Parser";
 import {Terminal} from "./Terminal";
-import {PlaceholderBlock} from "./parser/buffer/PlaceholderBlock";
-import {Buffer} from "./parser/buffer/Buffer";
+import {PlaceholderBlock} from "./buffer/PlaceholderBlock";
+import {Buffer} from "./buffer/Buffer";
 
 export class Printer {
 

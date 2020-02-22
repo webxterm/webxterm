@@ -11,6 +11,7 @@ import {Parser} from "./parser/Parser";
 import {EventHandler} from "./EventHandler";
 import {Cursor} from "./Cursor";
 import {Printer} from "./Printer";
+import {BufferSet} from "./buffer/BufferSet";
 
 export class Terminal {
 
@@ -23,7 +24,7 @@ export class Terminal {
     private readonly _instanceId: string = "";
 
     // 终端实例类名
-    public static brand: string = "webxterm";
+    static brand: string = "webxterm";
     // 终端容器
     private readonly _container: HTMLDivElement = document.createElement("div");
     // 视图
@@ -71,9 +72,13 @@ export class Terminal {
     private _scrollToBottom: boolean = true;
 
     // 是否已经初始化
-    public init: boolean = false;
+    init: boolean = false;
 
-    private _printer: Printer;
+    // 打印机
+    private readonly _printer: Printer;
+
+    // 缓冲区
+    private readonly _bufferSet: BufferSet;
 
     constructor(args: { [key: string]: any }) {
         const now = new Date();
@@ -95,6 +100,10 @@ export class Terminal {
         this._parser = new Parser(this);
         this.eventHandler = new EventHandler();
         this.eventHandler.listen(this);
+
+        // 设置活跃缓冲区为当前的默认缓冲区
+        this._bufferSet = new BufferSet(this.rows, this.columns);
+        this.addBufferFillRows();
 
         this._printer = new Printer(this);
 
@@ -223,7 +232,6 @@ export class Terminal {
         return this._parser;
     }
 
-
     get printer(): Printer {
         return this._printer;
     }
@@ -240,10 +248,14 @@ export class Terminal {
         return this._eventMap;
     }
 
+    get bufferSet(): BufferSet {
+        return this._bufferSet;
+    }
+
     /**
      * 获取字符的宽度和高度
      */
-    public measure(): void {
+    measure(): void {
 
         this._viewport.appendChild(this.measureDiv);
         this.measureSpan.innerHTML = 'W';
@@ -376,7 +388,7 @@ export class Terminal {
         return this._charHeight;
     }
 
-    public open(hostname: string,
+    open(hostname: string,
                 username: string,
                 password: string,
                 port: number = 22,
@@ -423,7 +435,7 @@ export class Terminal {
      * 打印文本
      * @param text
      */
-    public echo(text: string) {
+    echo(text: string) {
 
         //
         console.info("echo:" + text);
@@ -436,7 +448,7 @@ export class Terminal {
     /**
      * 启动打印机
      */
-    public startPrinter() {
+    startPrinter() {
 
         if (!!this.messageQueueTimer) return;
 
@@ -456,44 +468,50 @@ export class Terminal {
         }, 0);
     }
 
-    public bell(): void{
+    bell(): void{
 
     }
 
-    public focus(): void {
+    focus(): void {
         this._cursor.focus = true;
     }
 
-    public blur(): void {
+    blur(): void {
         this._cursor.focus = false;
     }
 
-    public reverseVideo() : void {
+    reverseVideo() : void {
 
     }
 
-    public normalVideo() : void {
+    normalVideo() : void {
 
     }
 
-    public showCursor() : void {
+    showCursor() : void {
         this._cursor.show = true;
         // 处理当前的光标
     }
 
-    public hideCursor(): void {
+    hideCursor(): void {
         this._cursor.show = false;
     }
 
-    public scrollToBottomOnInput(): void {
+    scrollToBottomOnInput(): void {
         if(this._preferences.scrollToBottomOnInput && this._scrollToBottom){
             this.container.scrollTop = this.container.scrollHeight;
         }
     }
 
-    public pushViewport(el: HTMLElement){
-        this.viewport.appendChild(el);
-    }
+    addBufferFillRows(){
 
+        let fragment = document.createDocumentFragment();
+        const lines = this.bufferSet.activeBuffer.lines;
+        for(let i = 0, len = lines.length; i < len; i++){
+            fragment.appendChild(lines[i].element);
+        }
+        this.viewport.appendChild(fragment);
+    }
+    
 
 }
