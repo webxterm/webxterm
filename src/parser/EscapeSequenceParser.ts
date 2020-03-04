@@ -3,11 +3,10 @@ import {Parser} from "./Parser";
 import {DataBlock} from "../buffer/DataBlock";
 import {BufferLine} from "../buffer/BufferLine";
 import {DataBlockAttribute} from "../buffer/DataBlockAttribute";
-import {CommonUtils} from "../common/CommonUtils";
 import {Preferences} from "../Preferences";
 import {Styles} from "../Styles";
-import {PlaceholderBlock} from "../buffer/PlaceholderBlock";
 import {Buffer} from "../buffer/Buffer";
+import {Color} from "../common/Color";
 
 
 // 8-bit
@@ -87,10 +86,13 @@ export class EscapeSequenceParser {
     private _replaceMode: boolean = true;
     // 插入字符模式
     private _insertMode: boolean = false;
+    // 光标闪烁
+    private readonly cursorBlinking: boolean = false;
 
     constructor(terminal: Terminal, parser: Parser) {
         this.parser = parser;
         this.terminal = terminal;
+        this.cursorBlinking = this.terminal.cursor.blinking;
     }
 
     get attribute(): DataBlockAttribute {
@@ -123,23 +125,6 @@ export class EscapeSequenceParser {
 
     get activeBuffer(): Buffer {
         return this.parser.bufferSet.activeBuffer;
-    }
-
-    /**
-     * 抹除当前行
-     * @param line
-     */
-    eraseLineDataBlock(line: BufferLine) {
-
-        for(let i = 0, len = line.blocks.length; i < len; i++){
-            let block = line.get(i);
-            if(block instanceof DataBlock){
-                // 数据块
-                block.erase(" ", this.attribute);
-            } else {
-                // PlaceholderBlock
-            }
-        }
     }
 
     /**
@@ -184,10 +169,10 @@ export class EscapeSequenceParser {
                 this.cursorForwardTabulation(params);
                 break;
             case "J":
-                this.eraseInDisplay(params, prefix === "?");
+                this.eraseInDisplay(params, prefix == "?");
                 break;
             case "K":
-                this.eraseInLine(params, prefix === "?");
+                this.eraseInLine(params, prefix == "?");
                 break;
             case "L":
                 this.insertLines(params);
@@ -199,14 +184,14 @@ export class EscapeSequenceParser {
                 this.deleteChars(params);
                 break;
             case "S":
-                if (prefix === "?") {
+                if (prefix == "?") {
                     this.setOrRequestGraphicsAttr(params);
                 } else {
                     this.scrollUpLines(params);
                 }
                 break;
             case "T":
-                if (prefix === ">") {
+                if (prefix == ">") {
                     this.resetTitleModeFeatures(params);
                 } else if (params.length > 1) {
                     this.initiateHighlightMouseTacking(params);
@@ -233,9 +218,9 @@ export class EscapeSequenceParser {
                 this.repeatPrecedingGraphicChars(params);
                 break;
             case "c":
-                if (prefix === "=") {
+                if (prefix == "=") {
                     this.sendTertiaryDeviceAttrs(params);
-                } else if (prefix === ">") {
+                } else if (prefix == ">") {
                     this.sendSecondaryDeviceAttrs(params);
                 } else {
                     this.sendPrimaryDeviceAttrs(params);
@@ -254,65 +239,65 @@ export class EscapeSequenceParser {
                 this.tabClear(params);
                 break;
             case "h":
-                this.setMode(params, prefix === "?");
+                this.setMode(params, prefix == "?");
                 break;
             case "i":
-                this.mediaCopy(params, prefix === "?");
+                this.mediaCopy(params, prefix == "?");
                 break;
             case "l":
-                this.resetMode(params, prefix === "?");
+                this.resetMode(params, prefix == "?");
                 break;
             case "m":
-                if (prefix === ">") {
+                if (prefix == ">") {
                     this.updateKeyModifierOptions(params);
                 } else {
                     this.charAttrs(params);
                 }
                 break;
             case "n":
-                if (prefix === ">") {
+                if (prefix == ">") {
                     this.disableKeyModifierOptions(params);
                     break;
                 }
-                this.deviceStatusReport(params, prefix === "?");
+                this.deviceStatusReport(params, prefix == "?");
                 break;
             case "p":
-                if (prefix === ">") {
+                if (prefix == ">") {
                     this.setPointerMode(params);
-                } else if (prefix === "!") {
+                } else if (prefix == "!") {
                     this.resetSoftTerminal();
-                } else if (suffix === "\"") {
+                } else if (suffix == "\"") {
                     this.setConformanceLevel(params);
-                } else if (suffix === "$") {
-                    this.requestANSIMode(params, prefix === "?");
-                } else if (prefix === "#") {
+                } else if (suffix == "$") {
+                    this.requestANSIMode(params, prefix == "?");
+                } else if (prefix == "#") {
                     this.pushVideoAttrsOntoStack(params);
-                } else if (suffix === "#") {
+                } else if (suffix == "#") {
                     this.pushVideoAttrsOntoStack(params);
                 }
                 break;
             case "q":
-                if (prefix === "#") {
+                if (prefix == "#") {
                     this.popVideoAttrsFromStack();
-                } else if (suffix === "\"") {
+                } else if (suffix == "\"") {
                     this.selectCharProtectionAttr(params);
-                } else if (suffix === " ") {
+                } else if (suffix == " ") {
                     this.setCursorStyle(params);
                 } else {
                     this.loadLeds(params);
                 }
                 break;
             case "r":
-                if (prefix === "?") {
+                if (prefix == "?") {
                     this.restoreDECPrivateMode(params);
-                } else if (suffix === "$") {
+                } else if (suffix == "$") {
                     this.changeAttrsInRectangularArea(params);
                 } else {
                     this.setScrollingRegion(params);
                 }
                 break;
             case "s":
-                if (prefix === "?") {
+                if (prefix == "?") {
                     this.saveDECPrivateMode(params);
                 } else if (params.length > 1) {
                     this.setMargins(params);
@@ -321,87 +306,87 @@ export class EscapeSequenceParser {
                 }
                 break;
             case "t":
-                if (prefix === ">") {
+                if (prefix == ">") {
                     this.setTitleModeFeatures(params);
-                } else if (suffix === " ") {
+                } else if (suffix == " ") {
                     this.setWarningBellVolume(params);
-                } else if (suffix === "$") {
+                } else if (suffix == "$") {
                     this.reverseAttrsInRectArea(params);
                 } else {
                     this.windowManipulation(params);
                 }
                 break;
             case "u":
-                if (suffix === " ") {
+                if (suffix == " ") {
                     this.setWarningBellVolume(params);
                 } else {
                     this.parser.restoreCursor();
                 }
                 break;
             case "v":
-                if (suffix === "$") {
+                if (suffix == "$") {
                     this.copyRectangularArea(params);
                 }
                 break;
             case "w":
-                if (suffix === "$") {
+                if (suffix == "$") {
                     this.requestPresentationStateReport(params);
-                } else if (suffix === "\"") {
+                } else if (suffix == "\"") {
                     this.enableFilterRectangle(params);
                 }
                 break;
             case "x":
-                if (suffix === "*") {
+                if (suffix == "*") {
                     this.selectAttrChangeExtent(params);
-                } else if (suffix === "$") {
+                } else if (suffix == "$") {
                     this.fillRectArea(params);
                 }
                 break;
             case "y":
-                if (suffix === "#") {
+                if (suffix == "#") {
                     this.selectChecksumExtension(params);
-                } else if (suffix === "*") {
+                } else if (suffix == "*") {
                     this.requestRectAreaChecksum(params);
                 }
                 break;
             case "z":
-                if (suffix === "'") {
+                if (suffix == "'") {
                     this.enableLocatorReporting(params);
-                } else if (suffix === "$") {
+                } else if (suffix == "$") {
                     this.eraseRectArea(params);
                 }
                 break;
             case "{":
-                if (suffix === "'") {
+                if (suffix == "'") {
                     this.selectLocatorEvents(params);
-                } else if (prefix === "#") {
+                } else if (prefix == "#") {
                     this.pushVideoAttrsOntoStack(params);
-                } else if (suffix === "#") {
+                } else if (suffix == "#") {
                     this.pushVideoAttrsOntoStack(params);
-                } else if (suffix === "$") {
+                } else if (suffix == "$") {
                     this.selectEraseRectArea(params);
                 }
                 break;
             case "|":
-                if (suffix === "#") {
+                if (suffix == "#") {
                     this.reportSelectedGraphicRendition(params);
-                } else if (suffix === "$") {
+                } else if (suffix == "$") {
                     this.selectColumnsPerPage(params);
-                } else if (suffix === "'") {
+                } else if (suffix == "'") {
                     this.requestLocatorPosition(params);
-                } else if (suffix === "*") {
+                } else if (suffix == "*") {
                     this.selectNumberOfLinesPerScreen(params);
                 }
                 break;
             case "}":
-                if (prefix === "#") {
+                if (prefix == "#") {
                     this.popVideoAttrsFromStack();
-                } else if (suffix === "'") {
+                } else if (suffix == "'") {
                     this.insertChars(params);
                 }
                 break;
             case "~":
-                if (suffix === "'") {
+                if (suffix == "'") {
                     this.deleteChars(params);
                 }
                 break;
@@ -420,11 +405,11 @@ export class EscapeSequenceParser {
     // CSI Ps SP @
     //           Shift left Ps columns(s) (default = 1) (SL), ECMA-48.
     insertChars(params: number[], prefix: string = "") {
-
-        if (prefix === " ") {
-
+        const ps = params[0] || 1;
+        if (prefix == " ") {
+            this.parser.x -= ps;
         } else {
-            for (let i = 0, ps = params[0] || 1; i < ps; i++) {
+            for (let i = 0; i < ps; i++) {
                 this.activeBufferLine.insert(this.parser.x, DataBlock.newBlock(" ", this.attribute));
                 this.parser.x++;
             }
@@ -442,10 +427,11 @@ export class EscapeSequenceParser {
     // CSI Ps SP A
     //           Shift right Ps columns(s) (default = 1) (SR), ECMA-48.
     cursorUp(params: number[], suffix: string = "") {
+        const ps = params[0] || 1;
         if (!!suffix) {
-
+            this.parser.x += ps;
         } else {
-            this.parser.y -= params[0] || 1;
+            this.parser.y -= ps;
             if (this.parser.y < 1) {
                 this.parser.y = 1;
             }
@@ -458,7 +444,8 @@ export class EscapeSequenceParser {
      */
     // CSI Ps B  Cursor Down Ps Times (default = 1) (CUD).
     cursorDown(params: number[]) {
-        this.parser.y += params[0] || 1;
+        const ps = params[0] || 1;
+        this.parser.y += ps;
         if (this.parser.y > this.terminal.rows) {
             this.parser.y = this.terminal.rows;
         }
@@ -484,7 +471,8 @@ export class EscapeSequenceParser {
      */
     // CSI Ps D  Cursor Backward Ps Times (default = 1) (CUB).
     cursorBackward(params: number[]) {
-        this.parser.x -= params[0] || 1;
+        const ps = params[0] || 1;
+        this.parser.x -= ps;
     }
 
     /**
@@ -542,10 +530,9 @@ export class EscapeSequenceParser {
      */
     // CSI Ps I  Cursor Forward Tabulation Ps tab stops (default = 1) (CHT).
     cursorForwardTabulation(params: number[]) {
-
-        for (let i = 0; i < params[0] || 1; i++) {
+        const ps = params[0] || 1;
+        for (let i = 0; i < ps; i++) {
             this.activeBufferLine.replace(this.parser.x, DataBlock.newBlock("\t", this.attribute));
-            // this.parser.buffer.get(this.parser.y).addOrUpdateBlock("\t", this.attribute, this.parser.x++);
             this.parser.x++;
         }
     }
@@ -596,7 +583,7 @@ export class EscapeSequenceParser {
                 break;
         }
 
-        if (begin === 1 && end === this.terminal.rows) {
+        if (begin == 1 && end == this.terminal.rows) {
             // 如果是全屏的话，那就滚动。
             // 如果是默认缓冲区的话，就滚动。
             scrollBack = this.parser.bufferSet.isNormal;
@@ -620,11 +607,8 @@ export class EscapeSequenceParser {
 
             } else {
                 const line = this.activeBuffer.get(y);
-                // 删除数据
-                line.dirty = true;
                 // 抹除当前行，抹除当前链数据
                 line.erase(this.attribute);
-
             }
 
         }
@@ -666,16 +650,10 @@ export class EscapeSequenceParser {
         }
 
         for (let i = begin, block; i <= end; i++) {
-
             block = this.activeBufferLine.get(i);
-            if(block instanceof DataBlock){
-                block.erase(" ", this.attribute);
-            }
-
+            block.erase(" ", this.attribute);
         }
 
-        // 设置为脏链
-        this.activeBufferLine.dirty = true;
     }
 
     /**
@@ -685,9 +663,8 @@ export class EscapeSequenceParser {
     // CSI Ps L  Insert Ps Line(s) (default = 1) (IL).
     insertLines(params: number[]) {
 
-        console.info('insertLines..', params);
-
-        for (let i = 0; i < (params[0] || 1); i++) {
+        const ps = params[0] || 1;
+        for (let i = 0; i < ps; i++) {
             // 删除当前行
             this.parser.insertLine();
         }
@@ -702,9 +679,8 @@ export class EscapeSequenceParser {
     deleteLines(params: number[]) {
 
         //
-        console.info('deleteLines..', params);
-
-        for (let i = 0; i < (params[0] || 1); i++) {
+        const ps = params[0] || 1;
+        for (let i = 0; i < ps; i++) {
             // 删除当前行
             this.parser.deleteLine();
         }
@@ -717,10 +693,8 @@ export class EscapeSequenceParser {
      */
     // CSI Ps P  Delete Ps Character(s) (default = 1) (DCH).
     deleteChars(params: number[]) {
-        console.info('deleteChars.params' + JSON.stringify(params));
-        const deleted = this.activeBufferLine.delete(this.parser.x, params[0] || 1);
-        // const deleted = this.parser.buffer.get(this.parser.y).removeBlock2(this.parser.x, params[0] || 1);
-        console.info('P.deleted', deleted);
+        const ps = params[0] || 1;
+        this.activeBufferLine.delete(this.parser.x, ps);
     }
 
     /**
@@ -781,8 +755,8 @@ export class EscapeSequenceParser {
      */
     // CSI Ps S  Scroll up Ps lines (default = 1) (SU), VT420, ECMA-48.
     scrollUpLines(params: number[]) {
-        console.info("scrollUpLines", params);
-        for(let i = 0; i < params[0] || 1; i++){
+        const ps = params[0] || 1;
+        for(let i = 0; i < ps; i++){
             this.parser.scrollUp();
         }
     }
@@ -831,8 +805,8 @@ export class EscapeSequenceParser {
     // if the line orientation is horizontal, or by n character positions if the line
     // orientation is vertical, such that the data appear to move down; where n equals the value of Pn.
     scrollDownLines(params: number[]) {
-        console.info("scrollDownLines:", params);
-        for(let i = 0; i < (params[0] || 1); i++){
+        const ps = params[0] || 1;
+        for(let i = 0; i < ps; i++){
             this.parser.scrollDown();
         }
 
@@ -844,14 +818,10 @@ export class EscapeSequenceParser {
      */
     // CSI Ps X  Erase Ps Character(s) (default = 1) (ECH).
     eraseChars(params: number[]) {
-
-        for (let i = this.parser.x; i < params[0] || 1; i++) {
+        const ps = params[0] || 1;
+        for (let i = this.parser.x; i < ps; i++) {
             let block = this.activeBufferLine.get(this.parser.x);
-            if(block instanceof DataBlock){
-                block.erase(" ", this.attribute);
-            }
-            // 设置为脏链
-            this.activeBufferLine.dirty = true;
+            block.erase(" ", this.attribute);
         }
 
     }
@@ -1111,7 +1081,7 @@ export class EscapeSequenceParser {
     //             Ps = 1 0 6 1  ⇒  Set VT220 keyboard emulation, xterm.
     //             Ps = 2 0 0 4  ⇒  Set bracketed paste mode, xterm.
     setMode(params: number[] | number, isDEC: boolean) {
-        if (typeof params === 'object') {
+        if (typeof params == 'object') {
             let len = params.length,
                 i = 0;
 
@@ -1178,7 +1148,6 @@ export class EscapeSequenceParser {
                     break;
                 case 25:
                     // show cursor
-                    console.info('show cursor....25h');
                     this.terminal.cursor.show = true;
                     break;
                 case 30:
@@ -1485,7 +1454,7 @@ export class EscapeSequenceParser {
     //             Ps = 2 0 0 4  ⇒  Reset bracketed paste mode, xterm.
     resetMode(params: number[] | number, isDEC: boolean) {
 
-        if (typeof params === 'object') {
+        if (typeof params == 'object') {
             let len = params.length,
                 i = 0;
 
@@ -1556,7 +1525,6 @@ export class EscapeSequenceParser {
                     break;
                 case 25:
                     // hide cursor
-                    console.info('hide cursor....25l');
                     this.terminal.cursor.show = false;
                     break;
                 case 30:
@@ -1671,6 +1639,11 @@ export class EscapeSequenceParser {
                     this.eraseInDisplay([2], false);
                     // 切换到默认缓冲区
                     this.parser.activateNormalBuffer();
+
+                    // 检查默认是否闪烁
+                    if(this.cursorBlinking !== this.terminal.cursor.blinking){
+                        this.terminal.cursor.blinking = this.cursorBlinking;
+                    }
                     // this.titeInhibit = false;
                     break;
                 case 1048:
@@ -1681,6 +1654,10 @@ export class EscapeSequenceParser {
                     // 切换到默认缓冲区&恢复光标
                     this.parser.activateNormalBuffer();
                     this.parser.restoreCursor();
+                    // 检查默认是否闪烁
+                    if(this.cursorBlinking !== this.terminal.cursor.blinking){
+                        this.terminal.cursor.blinking = this.cursorBlinking;
+                    }
                     // this.titeInhibit = false;
                     break;
                 case 1050:
@@ -1895,23 +1872,25 @@ export class EscapeSequenceParser {
     // (8.3.117) http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-048.pdf
     charAttrs(params: number[] | number) {
 
-        if (typeof params === 'object') {
+        if (typeof params == 'object') {
 
             for (let len = params.length, i = 0; i < len; i++) {
                 if (this.customColorMode !== 0) {
                     let color = "", name = "";
-                    if (params[i] === 2) {
+                    if (params[i] == 2) {
                         name += params[i + 1].toString(16);
                         name += params[i + 2].toString(16);
                         name += params[i + 3].toString(16);
                         color = "rgba(" + params[i + 1] + "," + params[i + 2] + "," + params[i + 3] + ", 0.99)";
-                    } else if (params[i] === 5) {
+                        i += 4;
+                    } else if (params[i] == 5) {
                         color = builtInColorPalette[params[i + 1]];
                         name = color.substring(1);
-                        color = CommonUtils.parseColor(color, 0.99);
+                        color = Color.parseColor(color);
+                        i += 2;
                     }
 
-                    if (this.customColorMode === 38) {
+                    if (this.customColorMode == 38) {
                         // 38;5;2m
                         // 38;2;100;100;100m
                         this.attribute.colorClass = "color_" + name;
@@ -1930,7 +1909,7 @@ export class EscapeSequenceParser {
                         }, this.terminal.instanceId);
 
 
-                    } else if (this.customColorMode === 48) {
+                    } else if (this.customColorMode == 48) {
                         // 48;5;2m
                         // 48;2;100;100;100m
                         this.attribute.backgroundColorClass = "_color_" + name;
@@ -1952,7 +1931,6 @@ export class EscapeSequenceParser {
 
                     this.customColorMode = 0;
 
-                    break;
                 }
                 this.charAttrs(params[i]);
             }
@@ -2071,7 +2049,7 @@ export class EscapeSequenceParser {
                     case 90:
                         // 高亮字体颜色
                         // 以亮色显示粗体文本
-                        if (num === 90 || (this.attribute.bold && this.preferences.showBoldTextInBrightColor)) {
+                        if (num == 90 || (this.attribute.bold && this.preferences.showBoldTextInBrightColor)) {
                             colorName = Preferences.paletteColorNames[params - num + 8];
                         } else {
                             colorName = Preferences.paletteColorNames[params - num];
@@ -2581,22 +2559,22 @@ export class EscapeSequenceParser {
                 // Omitted parameters reuse the current height or width.
                 break;
             case 9:
-                if(params[1] === 0){
+                if(params[1] == 0){
                     // Restore maximized window.
-                } else if(params[1] === 1){
+                } else if(params[1] == 1){
                     // Maximize window (i.e., resize to screen size).
-                } else if(params[1] === 2){
+                } else if(params[1] == 2){
                     // Maximize window vertically.
-                } else if(params[1] === 3){
+                } else if(params[1] == 3){
                     // Maximize window horizontally.
                 }
                 break;
             case 10:
-                if(params[1] === 0){
+                if(params[1] == 0){
                     // Undo full-screen mode.
-                } else if(params[1] === 1){
+                } else if(params[1] == 1){
                     // Change to full-screen.
-                } else if(params[1] === 2){
+                } else if(params[1] == 2){
                     // Toggle full-screen.
                 }
                 break;
@@ -2626,22 +2604,22 @@ export class EscapeSequenceParser {
                 // Report xterm window's title. Result is OSC  l  label ST
                 break;
             case 22:
-                if(params[1] === 0){
+                if(params[1] == 0){
                     // Save xterm icon and window title on stack.
-                } else if(params[1] === 1){
+                } else if(params[1] == 1){
                     // Save xterm icon title on stack.
                     console.info("Save xterm icon title on stack.");
-                } else if(params[1] === 2){
+                } else if(params[1] == 2){
                     // Save xterm window title on stack.
                     console.info("Save xterm window title on stack.");
                 }
                 break;
             case 23:
-                if(params[1] === 0){
+                if(params[1] == 0){
                     // Restore xterm icon and window title from stack.
-                } else if(params[1] === 1){
+                } else if(params[1] == 1){
                     // Restore xterm icon title from stack.
-                } else if(params[1] === 2){
+                } else if(params[1] == 2){
                     // Restore xterm window title from stack.
                 }
                 break;

@@ -1,11 +1,8 @@
 import {Terminal} from "../Terminal";
-import {EscapeSequenceParser} from "./EscapeSequenceParser";
 import {BufferLine} from "../buffer/BufferLine";
 import {Buffer} from "../buffer/Buffer";
 import {DataBlock} from "../buffer/DataBlock";
-import {OscParser} from "./OscParser";
 import {Printer} from "../Printer";
-import {PlaceholderBlock} from "../buffer/PlaceholderBlock";
 import {BufferSet} from "../buffer/BufferSet";
 
 // http://www.inwap.com/pdp10/ansicode.txt
@@ -131,7 +128,7 @@ export class Parser {
     private charsets: null[] | object[] = [null];
 
     // 当前终端
-    private terminal: Terminal;
+    readonly terminal: Terminal;
 
     // 解析参数
     private params: any[] = [];
@@ -145,23 +142,11 @@ export class Parser {
     private _gLevel: number = 0;
     private _gCharset: number = 0;
 
-    private readonly _esParser: EscapeSequenceParser;
-    private oscParser: OscParser;
-
     private _applicationKeypad: boolean = false;
     private _normalKeypad: boolean = true;
 
     constructor(terminal: Terminal) {
-
         this.terminal = terminal;
-
-        this._esParser = new EscapeSequenceParser(terminal, this);
-        this.oscParser = new OscParser(terminal, this);
-
-    }
-
-    get cursorLine(): BufferLine {
-        return this.activeBuffer.get(this.y);
     }
 
     get x(){
@@ -174,8 +159,6 @@ export class Parser {
         }
 
         this.activeBuffer.x = value;
-        // 位置改变，由于刷新光标的位置，所以需要标识当前行为脏行
-        this.activeBufferLine.dirty = true;
     }
 
     get y(){
@@ -190,8 +173,9 @@ export class Parser {
         }
 
         this.activeBuffer.y = value;
-        // 位置改变，由于刷新光标的位置，所以需要标识当前行为脏行
-        this.activeBufferLine.dirty = true;
+
+        if(!this.activeBufferLine.dirty)
+            this.activeBufferLine.dirty = true;
     }
 
     get bufferSet(): BufferSet {
@@ -208,10 +192,6 @@ export class Parser {
 
     set applicationKeypad(value: boolean) {
         this._applicationKeypad = value;
-    }
-
-    get esParser(): EscapeSequenceParser {
-        return this._esParser;
     }
 
     set gLevel(value: number) {
@@ -238,7 +218,9 @@ export class Parser {
      * 切换到备用缓冲区、并清除内容
      */
     activateAltBuffer() {
+
         this.bufferSet.activateAltBuffer();
+
         this.terminal.addBufferFillRows();
     }
 
@@ -247,12 +229,27 @@ export class Parser {
      */
     activateNormalBuffer() {
 
+        // 删除备用缓冲区的内容
         const lines = this.bufferSet.activeBuffer.lines;
         for(let i = 0, len = lines.length; i < len; i++){
             lines[i].element.remove();
         }
 
         this.bufferSet.activateNormalBuffer();
+
+        // ==> 为了解决内容没有充满缓冲区的时候，切换切换到备用缓冲区的时候，会有一段的空白。
+
+        // 将没有使用过的行添加到viewport的尾部
+        // 由于切换到备用缓冲区的时候，被删掉。
+        // See: this.bufferSet.activateAltBuffer()
+       let fragment = document.createDocumentFragment();
+       for(let y = 1; y <= this.activeBuffer.size; y++){
+           let line = this.activeBuffer.get(y);
+           if(line && !line.used){
+               fragment.appendChild(line.element);
+           }
+       }
+       this.viewport.appendChild(fragment);
     }
 
     /**
@@ -289,13 +286,18 @@ export class Parser {
                             // Backspace (BS  is Ctrl-H).
                             if(this.x > 1){
                                 this.x--;
+                                // 重置为非空
+                                // 如果前一个是中文的话。
+                                // const dataBlock = this.activeBufferLine.get(this.x);
+                                // dataBlock.empty = false;
+                                // dataBlock.attribute.len2 = false;
                             } else {
                                 this.terminal.bell();
                             }
                             break;
                         case C0.CR:
                             // Carriage Return (CR  is Ctrl-M).
-                            // 将"字车"归位(回车)
+                            // 将"字吧车"归位(回车)
                             this.x = 1;
                             break;
                         case C0.ENQ:
@@ -317,9 +319,13 @@ export class Parser {
                         // case C0.SP:
                         //     // Space.
                         //     break;
-                        // case C0.HT:
-                        //     // Horizontal Tab (HTS  is Ctrl-I).
-                        //     break;
+                        case C0.HT:
+                            // Horizontal Tab (HTS  is Ctrl-I).
+                            // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
+                            // 制表符
+                            // \t是补全当前字符串长度到8的整数倍,最少1个最多8个空格
+                            this.tab();
+                            break;
                         case C0.VT:
                             // Vertical Tab (VT  is Ctrl-K).
                             this.nextLine();
@@ -460,7 +466,7 @@ export class Parser {
 
                     if (chr === ";") break;
 
-                    this._esParser.parse(chr, this.params, this.prefix, this.suffix);
+                    this.terminal.esParser.parse(chr, this.params, this.prefix, this.suffix);
 
                     this.params = [];
                     this.currentParam = 0;
@@ -694,7 +700,7 @@ export class Parser {
 
                         this.params.push(this.currentParam);
 
-                        this.oscParser.parse(this.params);
+                        this.terminal.oscParser.parse(this.params);
 
                         this.params = [];
                         this.currentParam = 0;
@@ -724,12 +730,81 @@ export class Parser {
 
                     break;
                 case State.PM:
+
+                    // State.PM Ps ; Pt ST: 自定义消息
+                    // Ps = 0  ⇒  远程服务器断开连接, 执行 exit 命令
+                    // Ps = 1  ⇒  客户端断开连接，因网络抖动。
+                    // Ps = 2 ; href ; Pt  ⇒  超链接
+                    //
+
+                    leftChr = text[i - 1];
+                    if ((leftChr === C0.ESC && chr === '\\') || chr === C0.BEL) {
+                        // 结束符
+                        if (leftChr === C0.ESC) {
+                            if (typeof this.currentParam === 'string') {
+                                this.currentParam = this.currentParam.slice(0, -1);
+                            } else if (typeof this.currentParam == 'number') {
+                                this.currentParam = (this.currentParam - ('\x1b'.charCodeAt(0) - 48)) / 10;
+                            }
+                        }
+
+                        this.params.push(this.currentParam);
+
+                        switch (this.params[0]) {
+                            case 0:
+                            case 1:
+                                this.terminal.registerConnect();
+                                this.terminal.cursor.enable = false;
+                                break;
+                            case 2:
+                                // 超链接
+                                let [href, text] = (this.params[1] + "").split(";");
+                                for(let k = 0, len = text.length; k < len; k++){
+                                    let c = text.charAt(k);
+                                    if (!this.handleDoubleChars(c, href)) {
+                                        this.update(c, href);
+                                    }
+                                }
+                                break;
+                        }
+
+                        this.params = [];
+                        this.currentParam = 0;
+                        this.state = State.NORMAL;
+
+                    } else {
+
+                        if (!this.params.length) {
+                            if (chr >= '0' && chr <= '9') {
+                                this.currentParam =
+                                    this.currentParam * 10 + chr.charCodeAt(0) - 48;
+                            } else if (chr === ';') {
+                                this.params.push(this.currentParam);
+                                // 后面是字符串
+                                this.currentParam = '';
+                            } else {
+                                if (this.currentParam === 0) {
+                                    this.currentParam = '';
+                                }
+                                this.currentParam += chr;
+                            }
+                        } else {
+                            // pt
+                            this.currentParam += chr;
+                        }
+                    }
+
                     break;
             }
 
         }
 
+        // 为了确保最后一个是定位，如\x1b[H，需要将当前行设置为脏行。
+        if(!this.activeBufferLine.dirty)
+            this.activeBufferLine.dirty = true;
+
         this.printer.printBuffer();
+
         this.terminal.scrollToBottomOnInput();
 
     }
@@ -737,29 +812,40 @@ export class Parser {
     /**
      * 处理双字节字符
      * @param chr
+     * @param href 自定义超链接
      */
-    handleDoubleChars(chr: string) {
+    handleDoubleChars(chr: string, href: string = "") {
 
         if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(chr)) {
             // 双字节字符
             // 超过字数自动换行
             if (this.x > this.activeBuffer.columns) {
-                this.newLine();
+                this.nextLine();
                 this.x = 1;
             }
 
             // 添加数据
             // 占用两个位置
-            let block = DataBlock.newBlock(chr, this._esParser.attribute);
+            let block = DataBlock.newBlock(chr, this.terminal.esParser.attribute);
             block.attribute.len2 = true;
-
-            if(this.esParser.insertMode){
-                // 在光标的面前插入
-                this.activeBufferLine.insert(this.x, block, new PlaceholderBlock());
-            } else if(this.esParser.replaceMode){ // 默认
-                // 更新缓冲区的内容
-                this.activeBufferLine.replace(this.x, block, new PlaceholderBlock());
+            if(!!href){
+                block.href = href;
             }
+
+            // 空块
+            let block2 = DataBlock.newEmptyBlock();
+            block2.empty = true;
+
+            if(this.terminal.esParser.insertMode){
+                // 在光标的面前插入
+                this.activeBufferLine.insert(this.x, block, block2);
+            } else if(this.terminal.esParser.replaceMode){ // 默认
+                // 更新缓冲区的内容
+                this.activeBufferLine.replace(this.x, block, block2);
+            }
+
+            if(!this.activeBufferLine.dirty)
+                this.activeBufferLine.dirty = true;
 
             this.x += 2;
 
@@ -768,6 +854,19 @@ export class Parser {
 
         return false;
 
+    }
+
+    /**
+     * 制表符(\t)
+     * 规则：\t是补全当前字符串长度到8的整数倍,最少1个最多8个空格
+     */
+    private tab(){
+        // 需要补多少个空格
+        const tabSize = this.terminal.preferences.tabSize;
+        let spCount = tabSize - ((this.x - 1) % tabSize);
+        for(let i = 0; i < spCount; i++){
+            this.update(" ");
+        }
     }
 
     /**
@@ -817,7 +916,6 @@ export class Parser {
         } else {
             //
             this.y += 1;
-
         }
 
     }
@@ -826,7 +924,9 @@ export class Parser {
      * 保存光标
      */
     saveCursor() {
+
         this.printer.printLine(this.activeBuffer.get(this.y));
+
         this.activeBuffer.savedY = this.y;
         this.activeBuffer.savedX = this.x;
     }
@@ -849,33 +949,41 @@ export class Parser {
         this.activeBuffer.append(line);
 
         this.viewport.appendChild(line.element);
+
     }
 
     /**
      * 更新缓冲区的内容
      * @param chr
+     * @param href 自定义超链接的功能
      */
-    private update(chr: string) {
+    private update(chr: string, href: string = "") {
 
         // 当行内容超过指定的数量的时候，需要再次换行。
-        if(this.x == 98){
-            console.info('......');
-        }
         if (this.x > this.activeBuffer.columns) {
             this.nextLine();
             // 光标重置
             this.x = 1;
         }
 
-        let block = DataBlock.newBlock(chr, this._esParser.attribute);
-        if(this.esParser.insertMode){
+        let block = DataBlock.newBlock(chr, this.terminal.esParser.attribute);
+        if(!!href){
+            block.href = href;
+        }
+        if(this.terminal.esParser.insertMode){
             // 在光标的面前插入
             this.activeBufferLine.insert(this.x, block);
-        } else if(this.esParser.replaceMode){ // 默认
+        } else if(this.terminal.esParser.replaceMode){ // 默认
             // 更新缓冲区的内容
             this.activeBufferLine.replace(this.x, block);
             this.x += 1;
         }
+
+        if(!this.activeBufferLine.dirty){
+            this.activeBufferLine.dirty = true;
+        }
+
+
 
     }
 
@@ -884,14 +992,15 @@ export class Parser {
      */
     insertLine(){
 
-        let line = this.activeBuffer.getBlankLine();
-        // 正向索引
         // 在指定的位置插入一行
+        let line = this.activeBuffer.getBlankLine();
+
         let afterNode = this.activeBuffer.insert(this.y, line)[0];
         this.viewport.insertBefore(line.element, afterNode);
 
         // 删除底部的行
-        this.activeBuffer.delete(this.activeBuffer.scrollBottom, 1, false);
+        const y = this.activeBuffer.scrollBottom + 1;  // index = scrollBottom
+        this.activeBuffer.delete(y, 1, false);
 
     }
 
@@ -900,20 +1009,22 @@ export class Parser {
      */
     deleteLine(){
 
-        let line = this.activeBuffer.getBlankLine();
-
-        // 在光标的位置删除行
-        this.activeBuffer.delete(this.y, 1, false);
-
-        let afterNode = this.activeBuffer.insert(this.activeBuffer.scrollBottom, line)[0];
+        // 在滚动底部添加行
+        const line = this.activeBuffer.getBlankLine();
 
         if(this.activeBuffer.scrollBottom === this.terminal.rows){
             // 在底部添加
+            this.activeBuffer.append(line);
             this.viewport.appendChild(line.element);
         } else {
             // 在后一行插入前
+            const y = this.activeBuffer.scrollBottom + 1; // index = scrollBottom
+            let afterNode = this.activeBuffer.insert(y, line)[0];
             this.viewport.insertBefore(line.element, afterNode);
         }
+
+        // 在光标的位置删除行
+        this.activeBuffer.delete(this.y, 1, false);
 
     }
 
@@ -922,6 +1033,8 @@ export class Parser {
      * 原理：底部添加行，顶部删除行
      */
     scrollUp(){
+
+        // let d1 = new Date().getTime();
 
         let line = this.activeBuffer.getBlankLine();
 
@@ -933,17 +1046,23 @@ export class Parser {
             // 在后一行插入前
             // 在底行添加空行
             // rows = 24, scrollBottom = 24, y = 24
-            const y = this.activeBuffer.scrollBottom + 1;
+            const y = this.activeBuffer.scrollBottom + 1; // index = scrollBottom
             let afterNode = this.activeBuffer.insert(y, line)[0];
             this.viewport.insertBefore(line.element, afterNode);
         }
 
         // 删除顶行
         // 如果是备用缓冲区的话，就删除顶行。
-        const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, true);
+
+        // 如果是缓冲区第一个是顶行的话，就保存，否则需要删除。
+        const saveLines = this.activeBuffer.scrollTop === 1;
+        const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, saveLines);
         for(let savedLine of savedLines){
             this.printer.printLine(savedLine, false);
         }
+
+        // let d2 = new Date().getTime();
+        // console.info("scrollUp: d2-d1:" + (d2 - d1) + ", parent:" + parent);
 
     }
 
@@ -954,6 +1073,7 @@ export class Parser {
     scrollDown(){
 
         let line = this.activeBuffer.getBlankLine();
+
         // 删除底行
         this.activeBuffer.delete(this.activeBuffer.scrollBottom, 1, false);
 

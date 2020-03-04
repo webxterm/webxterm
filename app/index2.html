@@ -4,24 +4,23 @@
     <meta charset="UTF-8">
     <title>Title</title>
     <meta name="viewport"
-          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no"/>
-
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, minimal-ui"/>
+    <meta name="x5-fullscreen" content="true">
+    <meta name="full-screen" content="yes">
+    <meta name="browsermode" content="application">
+    <meta name="x5-page-mode" content="app">
     <meta http-equiv="Expires" content="0">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Cache-control" content="no-cache">
     <meta http-equiv="Cache" content="no-cache">
 
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="browsermode" content="application">
-    <meta name="full-screen" content="yes" />
-    <meta name="x5-fullscreen" content="true" />
-    <meta name="x5-page-mode" content="app" />
-    <meta name="360-fullscreen" content="true" />
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-touch-fullscreen" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
 
 
-    <link rel="stylesheet" href="../css/terminal.css?version=1.3">
-    <script type="text/javascript" src="../dist/webxterm.js?version=1.84"></script>
+    <link rel="stylesheet" href="../css/terminal.css?version=1.2">
+    <script type="text/javascript" src="../dist/webxterm.js?version=1.8"></script>
     <style>
         .key-item {
             width: 36px;
@@ -43,29 +42,26 @@
 <body>
 
 
-<!--    <div style="display: flex; flex-direction: column">-->
+    <div style="display: flex; flex-direction: column">
 
-<!--        <div id="test" style="width: 100vw; height: calc(100vh - 40px);"></div>-->
-<!--        &lt;!&ndash;    <div style="height: 20vh"><a href="javascript:download();">下载日志文件</a></div>&ndash;&gt;-->
-
-
-<!--        <div id="keyboard"-->
-<!--             style="height: 40px;overflow-x: scroll; background-color: rgba(0,0,0,0.7); display: flex; align-items: center">-->
-<!--            <span class="key-item"><</span>-->
-<!--            <span class="key-item">ctrl</span>-->
-<!--            <span class="key-item">esc</span>-->
-<!--            <span class="key-item">-</span>-->
-<!--            <span class="key-item">/</span>-->
-<!--            <span class="key-item">alt</span>-->
-<!--            <span class="key-item">ins</span>-->
-<!--            <span class="key-item">del</span>-->
-<!--        </div>-->
+        <div id="test" style="width: 100vw; height: calc(100vh - 40px);"></div>
+        <!--    <div style="height: 20vh"><a href="javascript:download();">下载日志文件</a></div>-->
 
 
-<!--    </div>-->
+        <div id="keyboard"
+             style="height: 40px;overflow-x: scroll; background-color: rgba(0,0,0,0.7); display: flex; align-items: center">
+            <span class="key-item"><</span>
+            <span class="key-item">ctrl</span>
+            <span class="key-item">esc</span>
+            <span class="key-item">-</span>
+            <span class="key-item">/</span>
+            <span class="key-item">alt</span>
+            <span class="key-item">ins</span>
+            <span class="key-item">del</span>
+        </div>
 
-    <div id="test" style="width: 100vw; height: 100vh;"></div>
 
+    </div>
 
 
 <script type="text/javascript">
@@ -88,24 +84,28 @@
             console.info("updateTitle:" + title);
         }
     })
-        .open(
-            // '192.168.0.106',
-            // 'baikai',
-            // 'x+y-1=0?x&y',
-            // 22
-            // '103.106.245.117', 'root', '2730e5499c', 2025
-            '182.61.55.239', 'root', 'baikai#1234', 2025
-            // '192.168.0.100', 'fei00', '0000', 22
-        );
+        // .open(
+        //     // '192.168.0.106',
+        //     // 'baikai',
+        //     // 'x+y-1=0?x&y',
+        //     // 22
+        //     // '103.106.245.117', 'root', '2730e5499c', 2025
+        //     '182.61.55.239', 'root', 'baikai#1234', 2025
+        //     // '192.168.0.100', 'fei00', '0000', 22
+        // );
 
-    // setTimeout(()=> {
+    setTimeout(()=> {
+
+        terminal.write('Last login: Mon Feb 24 12:10:27 2020 from 127.0.0.1\r\r\n'
+        );terminal.write('\x1b[1m\x1b[7m%\x1b[m\x1b[1m\x1b[0m                                                                                             \r \r'
+        );terminal.write('\r\x1b[0m\x1b[m\x1b[m\x1b[Jfei00@baikai ~ % \x1b[K\x1b[?2004h'
+        );terminal.write('t'
+        );terminal.write('\x08to'
+        );terminal.write('p');
+        terminal.write('\x1b[?1049h\x1b[1;54r\x1b[4l\x1b[?25l\x1b(B\x1b[m\x1b[37m\x1b[40m\x1b[1;54r\x1b[H\x1b[2J\x1b[1;1H\x1b[97m\x1b[44m\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\n\x1b[K\x1b[1;1H\x1b[37mText Mode Setup Utility 1.19.9\x1b[K\x1b[21;6H\x1b[30m\x1b[47m\xe2\x94\x8c\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\xa4 \x1b[31mChoose a Tool\x1b[30m \xe2\x94\x9c\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x90\x1b[22;6H\xe2\x94\x82                                  \xe2\x94\x82\x1b[97m\x1b[40m \x1b[23;6H\x1b[30m\x1b[47m\xe2\x94\x82  \x1b[37m\x1b[41m Authentication configuration \x1b[30m\x1b[47m  \xe2\x94\x82\x1b[97m\x1b[40m \x1b[24;6H\x1b[30m\x1b[47m\xe2\x94\x82   Firewall configuration         \xe2\x94\x82\x1b[97m\x1b[40m \x1b[25;6H\x1b[30m\x1b[47m\xe2\x94\x82   Keyboard configuration         \xe2\x94\x82\x1b[97m\x1b[40m \x1b[26;6H\x1b[30m\x1b[47m\xe2\x94\x82   System services                \xe2\x94\x82\x1b[97m\x1b[40m \x1b[27;6H\x1b[30m\x1b[47m\xe2\x94\x82                                  \xe2\x94\x82\x1b[97m\x1b[40m \x1b[28;6H\x1b[30m\x1b[47m\xe2\x94\x82      \x1b[37m\x1b[41m\xe2\x94\x8c\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x90\x1b[30m\x1b[47m  \x1b[37m\x1b[41m\xe2\x94\x8c\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x90\x1b[30m\x1b[47m      \xe2\x94\x82\x1b[97m\x1b[40m \x1b[29;6H\x1b[30m\x1b[47m\xe2\x94\x82      \x1b[37m\x1b[41m\xe2\x94\x82 Run Tool \xe2\x94\x82\x1b[97m\x1b[40m \x1b[30m\x1b[47m \x1b[37m\x1b[41m\xe2\x94\x82 Quit \xe2\x94\x82\x1b[97m\x1b[40m \x1b[30m\x1b[47m     \xe2\x94\x82\x1b[97m\x1b[40m \x1b[30;6H\x1b[30m\x1b[47m\xe2\x94\x82      \x1b[37m\x1b[41m\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\x1b[97m\x1b[40m \x1b[30m\x1b[47m \x1b[37m\x1b[41m\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\x1b[97m\x1b[40m \x1b[30m\x1b[47m     \xe2\x94\x82\x1b[97m\x1b[40m \x1b[31;6H\x1b[30m\x1b[47m\xe2\x94\x82       \x1b[97m\x1b[40m            \x1b[30m\x1b[47m  \x1b[97m\x1b[40m        \x1b[30m\x1b[47m     \xe2\x94\x82\x1b[97m\x1b[40m \x1b[32;6H\x1b[30m\x1b[47m\xe2\x94\x82                                  \xe2\x94\x82\x1b[97m\x1b[40m \x1b[33;6H\x1b[30m\x1b[47m\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\x1b[97m\x1b[40m \x1b[34;7H                                    \x1b[54;5H\x1b[44m<Tab>/<Alt-Tab> between elements  |    Us\x1b[54;45He\x08\x1b[4hs\x1b[4l\x1b[23;9H');
+
     //
-    //     terminal.echo('Last login: Mon Feb 24 12:10:27 2020 from 127.0.0.1\r\r\n'
-    //     );terminal.echo('\x1b[1m\x1b[7m%\x1b[m\x1b[1m\x1b[0m                                                                                             \r \r'
-    //     );terminal.echo('\r\x1b[0m\x1b[m\x1b[m\x1b[Jfei00@baikai ~ % \x1b[K\x1b[?2004h'
-    //     );terminal.echo('t'
-    //     );terminal.echo('\x08to'
-    //     );terminal.echo('p'
+
     //     );terminal.echo('\x1b[?2004l\r\r\n'
     //     );terminal.echo('\x1b(B\x1b)0\x1b[1;44r\x1b[m\x0f\x1b[?7h\x1b[?1h\x1b='
     //     );terminal.echo('\x1b[H\x1b[JProcesses: 551 total, 2 running, 549 sleeping, 2345 threads\x1b[1;86H12:10:51\r\x1b[1BLoad Avg: 2.21, 2.51, 2.22  CPU usage: 6.16% user, 10.92% sys, 82.91% idle\r\x1b[1BSharedLibs: 298M resident, 63M data, 23M linkedit.\r\x1b[1BMemRegions: 204494 total, 5475M resident, 112M private, 2492M shared.\r\x1b[1BPhysMem: 15G used (4876M wired), 1023M unused.\r\x1b[1BVM: 2561G vsize, 1882M framework vsize, 109527560(0) swapins, 113579840(0) swapouts.\r\x1b[1BNetworks: packets: 117520493/88G in, 144809306/59G out.\r\x1b[1BDisks: 27161690/802G read, 22299276/848G written.\r\x1b[2BPID    COMMAND\x1b[6C\x1b[0;7m\x0f%CPU\x1b[m\x0f TIME     #TH   #WQ  #PORT MEM   PURG  CMPRS PGRP  PPID  STATE\r\x1b[1B97058  httpd\x1b[11;21H0.0  00:00.01 1     0    18    468K  0B    444K  158   158   sleeping\r\x1b[1B96947  MTLCompilerS 0.0  00:00.26 2     1    27    17M   0B    17M   96947 1     sleeping\r\x1b[1B96946  MTLCompilerS 0.0  00:00.36 2     1    27    17M   0B    17M   96946 1     sleeping\r\x1b[1B96945  MTLCompilerS 0.0  00:00.31 2     1    27    18M   0B    18M   96945 1     sleeping\r\x1b[1B9'
@@ -123,7 +123,7 @@
     //     terminal.echo('  13M   579  \r\x1b[1B346    airportd     0.0  17:50.38 10    8    1188   15M-   0B    9336K 346  \r\x1b[1B74839  thnuclnt\x1b[7C0  00:40.08 1     0    8      272K \x1b[38;66H224K  39667 74836\r\x1b[1B74835  thnuclnt\x1b[7C0  00:36.80 1     0    8  \x1b[6C0K   0B    288K  39667 74831\r\x1b[1B22240  SecureCRT\x1b[6C0  05:24.60\x1b[7C1    340    166M   29M   100M  22240\r\x1b[1B748    EmojiFunctio 0.0  04:23.21 4     2    300-   12M-   0B    6248K 748  \r\x1b[1B131    configd\x1b[42;23H0  02:33.22 10    3    488+   8336\x1b[42;66H5536K 131   1    \r\x1b[1B188    notifyd      0.0  06:57.09 2     1    477    3368K \x1b[7C1632K 188  \r\x1b[1B17193  Python       0.0\x1b[6C2.93 2     0    19     14M   \x1b[44;73H7188 17188\x1b[8C'
     //     );
     //
-    // }, 1000);
+    }, 1000);
 
     // setTimeout(() => {
     //     terminal.echo('\x1b[1;19r\x1b[19;1H\r\n\x1b[1;20r\x1b[20;72H\x1b[K\x1b[20;72H20,1\x1b[10CBot\x1b[19;1H');

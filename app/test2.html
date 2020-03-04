@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style>
+
+        @font-face {
+            font-family: 'DejaVuSansMono';
+            src: url('../css/font/dejavu/DejaVuSansMono.ttf?version=1.2');
+        }
+        @font-face {
+            font-family: 'DejaVuSansMono-Bold';
+            src: url('../css/font/dejavu/DejaVuSansMono-Bold.ttf');
+        }
+        @font-face {
+            font-family: 'DejaVuSansMono-BoldOblique';
+            src: url('../css/font/dejavu/DejaVuSansMono-BoldOblique.ttf');
+        }@font-face {
+            font-family: 'DejaVuSansMono-Oblique';
+            src: url('../css/font/dejavu/DejaVuSansMono-Oblique.ttf');
+        }
+
+        @font-face {
+            font-family: 'FreeMono';
+            src: url('../css/font/gnu-free/FreeMono.ttf');
+        }
+        @font-face {
+            font-family: 'FreeMonoBold';
+            src: url('../css/font/gnu-free/FreeMonoBold.ttf');
+        }@font-face {
+            font-family: 'FreeMonoBoldOblique';
+            src: url('../css/font/gnu-free/FreeMonoBoldOblique.ttf');
+        }@font-face {
+            font-family: 'FreeMonoOblique';
+            src: url('../css/font/gnu-free/FreeMonoOblique.ttf');
+        }
+
+        @font-face {
+            font-family: 'UbuntuMono-B';
+            src: url('../css/font/ubuntu/UbuntuMono-B.ttf');
+        }
+        @font-face {
+            font-family: 'UbuntuMono-BI';
+            src: url('../css/font/ubuntu/UbuntuMono-BI.ttf');
+        }
+        @font-face {
+            font-family: 'UbuntuMono-R';
+            src: url('../css/font/ubuntu/UbuntuMono-R.ttf');
+        }
+        @font-face {
+            font-family: 'UbuntuMono-RI';
+            src: url('../css/font/ubuntu/UbuntuMono-RI.ttf');
+        }
+
+        @font-face {
+            font-family: 'LiberationMono-Bold';
+            src: url('../css/font/liberation/LiberationMono-Bold.ttf');
+        }
+
+        @font-face {
+            font-family: 'LiberationMono-BoldItalic';
+            src: url('../css/font/liberation/LiberationMono-BoldItalic.ttf');
+        }
+
+        @font-face {
+            font-family: 'LiberationMono-Italic';
+            src: url('../css/font/liberation/LiberationMono-Italic.ttf');
+        }
+
+        @font-face {
+            font-family: 'LiberationMono-Regular';
+            src: url('../css/font/liberation/LiberationMono-Regular.ttf');
+        }
+
+    </style>
+</head>
+<body>
+    <textarea id="result" style="width: 100vw; height: 50vh"></textarea>
+
+    <script>
+        const fontFamily = [
+            "DejaVuSansMono",
+            // "DejaVuSansMono-Bold",
+            // "DejaVuSansMono-BoldOblique",
+            // "DejaVuSansMono-Oblique",
+            "FreeMono",
+            // "FreeMonoBold",
+            // "FreeMonoBoldOblique",
+            // "FreeMonoOblique",
+            // "UbuntuMono-B",
+            // "UbuntuMono-BI",
+            "UbuntuMono-R",
+            "UbuntuMono-RI",
+            // "LiberationMono-Bold",
+            // "LiberationMono-BoldItalic",
+            // "LiberationMono-Italic",
+            "LiberationMono-Regular"
+        ];
+
+        let result = {};
+        for(let f of fontFamily){
+
+            let test = document.createElement("div");
+            test.style.fontFamily = f;
+            document.body.appendChild(test);
+
+            for(let i = 0; i < 30; i++){
+                let span = document.createElement("span");
+                span.innerHTML = "w";
+                span.style.fontSize = (i + 6) + "pt";
+                span.setAttribute("data-size", (i + 6) + "pt");
+                test.appendChild(span);
+            }
+
+            setTimeout(() => {
+
+                let obj = {};
+                for(let node of test.childNodes){
+                    let rect = node.getBoundingClientRect();
+                    // value += '"' + node.getAttribute("data-size") + '":';
+                    // value += "[" + rect.width + ", " + rect.height + "], ";
+                    // let key = node.getAttribute("data-size");
+                    obj[node.getAttribute("data-size")] = [rect.width, rect.height];
+                }
+
+                result[f] = obj;
+
+                document.getElementById('result').value = JSON.stringify(result);
+                // console.info(value.substring(0, value.length) + "}");
+
+
+            }, 3000);
+
+
+        }
+
+
+
+    </script>
+</body>
+</html>

@@ -1,10 +1,11 @@
 /**
  * 事件处理器
  */
-import {Keyboard} from "./input/Keyboard";
-import {Terminal} from "./Terminal";
-import {CommonUtils} from "./common/CommonUtils";
-import {Styles} from "./Styles";
+import {Keyboard} from "./Keyboard";
+import {Terminal} from "../Terminal";
+import {CommonUtils} from "../common/CommonUtils";
+import {Styles} from "../Styles";
+import {Composition} from "./Composition";
 
 enum FocusTarget {
     UNDEFINED,  // 未定义
@@ -25,6 +26,9 @@ export class EventHandler {
 
     // 按快捷键全选。
     private quickSelectAll: boolean = false;
+
+    // 正在输入，中文输入法 / 229
+    private composing: Composition = new Composition();
 
     /**
      * 获取选中的内容
@@ -193,6 +197,42 @@ export class EventHandler {
 
         });
 
+        // container.addEventListener("keydown", (e: KeyboardEvent) => {
+        //     console.info('container。。。。。', e);
+        // });
+
+        document.addEventListener("keydown", (e: KeyboardEvent) => {
+            console.info(e);
+            // 修饰键不处理。
+            if(e.key === "Alt"
+                || e.key === "Control"
+                || e.key === "Shift"
+                || e.metaKey
+                || e.altKey){
+                return;
+            }
+
+            let keySym = this.keyboard.getKeySym(e,
+                terminal.esParser.applicationCursorKeys,
+                terminal.parser.applicationKeypad);
+
+            this.paste(keySym, "key", terminal);
+
+            clipboard.focus();
+        });
+
+        // document.body.addEventListener("click", (e) => {
+        //     console.info(e);
+        // }, true);
+
+        // container.addEventListener("keypress", (e: KeyboardEvent) => {
+        //     console.info(e);
+        // });
+        //
+        // clipboard.addEventListener("keypress", (e: KeyboardEvent) => {
+        //     console.info(e);
+        // });
+
         clipboard.addEventListener('keydown', (e:KeyboardEvent) => {
 
             console.info(e);
@@ -220,11 +260,109 @@ export class EventHandler {
             // 禁止冒泡
             e.stopPropagation();
 
+            // 手机输入法。。。。
+            if (e.which === 229 || e.keyCode == 229) {
+                // "Process": 229,
+                // 手机端 e.which
+                // d => 229
+                // a => 229
+                // t => 229
+                // e => 229
+
+                // date => \x08date
+                // this.composition.push(key);
+                //
+                // return key;
+                const key = e.key;
+
+
+                if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(key)) {
+                    // 中文正常处理。。
+                } else {
+
+                    switch (this.composing.state) {
+                        case 0:
+                            this.composing.reset();
+                            this.composing.update = key;
+                            this.composing.state = 1;
+                            this.composing.running = true;
+
+                            // 显示联想输入
+                            compositionElement = document.createElement("span");
+                            compositionElement.className = "composition2";
+                            compositionElement.innerHTML = this.composing.update;
+                            let currentElement = terminal.cursor.currentElement;
+                            if(currentElement && currentElement.parentElement){
+                                currentElement.parentElement.insertBefore(compositionElement, currentElement);
+                            }
+
+                            break;
+                        case 1:
+                            // 正在输入
+                            this.composing.state = 2;
+                        case 2:
+                            this.composing.update = this.composing.update + key;
+                            compositionElement.innerHTML = this.composing.update;
+                            break;
+                        case 3:
+                            this.composing.end = key;
+                            compositionElement.innerHTML = this.composing.end;
+
+                            // 发送内容给后台
+                            this.paste(this.composing.end, "composition", terminal);
+
+                            this.composing.reset();
+                            compositionElement.remove();
+
+                            break;
+                    }
+
+                    console.info(JSON.stringify(this.composing));
+
+                    return;
+                }
+
+            } else if(!this.composing.events && this.composing.running){
+
+                // 不是事件产生，并且正在输入
+                if(e.key == "Backspace"){
+                    // 回退键
+                    this.composing.running = false;
+                    this.composing.update = "";
+                    this.composing.done = true;
+                    this.composing.state = 3;
+
+                } else if(e.key == "Enter"){
+                    // 回车键
+                    this.composing.end = this.composing.update;
+                    compositionElement.innerHTML = this.composing.end;
+
+                    this.composing.running = false;
+                    this.composing.update = "";
+                    this.composing.done = true;
+                    this.composing.state = 3;
+
+                    // 发送内容给后台
+                    this.paste(this.composing.end, "composition", terminal);
+
+                    this.composing.reset();
+                    compositionElement.remove();
+                }
+                return;
+            }
+
+
             let keySym = this.keyboard.getKeySym(e,
-                terminal.parser.esParser.applicationCursorKeys,
+                terminal.esParser.applicationCursorKeys,
                 terminal.parser.applicationKeypad);
 
             this.paste(keySym, "key", terminal);
+
+            // 如果还没有满屏的话，不用滚动了
+            if(terminal.bufferSet.activeBuffer.currentLineNum > terminal.rows
+                && !terminal.enableScrollToBottom){
+                terminal.enableScrollToBottom = true;
+            }
 
         });
 
@@ -237,15 +375,18 @@ export class EventHandler {
 
         clipboard.addEventListener("compositionstart", (e) => {
             if(e instanceof CompositionEvent) {
-                // this.composing.update = e.data;
-                // this.composing.done = false;
-                // this.composing.running = true;
-                // console.info(this.composing);
+                // 输入之前先重置
+                this.composing.reset();
+                this.composing.events = true;
+                this.composing.update = e.data;
+                this.composing.running = true;
+                this.composing.state = 1;
+                console.info(JSON.stringify(this.composing));
 
                 // 显示联想输入
                 compositionElement = document.createElement("span");
                 compositionElement.className = "composition";
-                compositionElement.innerHTML = e.data;
+                compositionElement.innerHTML = this.composing.update;
                 let currentElement = terminal.cursor.currentElement;
                 if(currentElement && currentElement.parentElement){
                     currentElement.parentElement.insertBefore(compositionElement, currentElement);
@@ -258,11 +399,12 @@ export class EventHandler {
         // 联想输入更新
         clipboard.addEventListener('compositionupdate', (e) => {
             if(e instanceof CompositionEvent) {
-                // this.composing.update = e.data;
-                // console.info(this.composing);
-                // this.terminal.echoComposition(this.composing);
+                this.composing.update = e.data;
+                this.composing.state = 2;
+                console.info(JSON.stringify(this.composing));
+
                 if(compositionElement){
-                    compositionElement.innerHTML = e.data;
+                    compositionElement.innerHTML = this.composing.update;
 
                     CommonUtils.addClass(compositionElement, "running");
                     if(!!compositionBlinkingTimer){
@@ -280,19 +422,24 @@ export class EventHandler {
         // 联想输入结束
         clipboard.addEventListener('compositionend', (e) => {
             if(e instanceof CompositionEvent){
-                // this.composing.update = "";
-                // this.composing.done = true;
-                // this.composing.running = false;
-                // this.composing.end = e.data;
-                // console.info(this.composing);
-                // clipboard.value = '';
-                // this.terminal.echoComposition(this.composing);
+
+                this.composing.update = "";
+                this.composing.done = true;
+                this.composing.running = false;
+                this.composing.end = e.data;
+                this.composing.state = 3;
+
+                console.info(JSON.stringify(this.composing));
+
                 if(compositionElement){
 
-                    compositionElement.innerHTML = e.data;
+                    compositionElement.innerHTML = this.composing.end;
 
                     // 发送内容给后台
                     this.paste(e.data, "composition", terminal);
+
+                    // 重置
+                    this.composing.reset();
 
                     compositionElement.remove();
 
@@ -305,7 +452,7 @@ export class EventHandler {
             // 判断是否滚动到底部。
             // 如果没有滚动到底部，输出内容的时候，也无需滚动到底部。
             let target = <HTMLElement> e.target;
-            terminal.scrollToBottom = target.scrollTop + target.getBoundingClientRect().height + 15 >= target.scrollHeight;
+            terminal.enableScrollToBottom = target.scrollTop + target.getBoundingClientRect().height + 15 >= target.scrollHeight;
         });
 
         let resizingTimer: number = 0, blurTimer: number = 0;
@@ -318,8 +465,14 @@ export class EventHandler {
                 blurTimer = 0;
             }
 
-            console.info('获取焦点');
             e.stopPropagation();
+            e.preventDefault();
+
+            console.info('获取焦点');
+
+            // IOS键盘弹出键盘上移
+            window.scrollTo(0,0);
+
             terminal.focus();
             clipboard.value = '';
             focusTarget = FocusTarget.CLIPBOARD;
@@ -327,29 +480,36 @@ export class EventHandler {
 
         clipboard.focus(defaultOption);
 
-        clipboard.addEventListener('blur', (e) => {
-            // 如果100ms，没有focus的话，就获取焦点。
-            // 否则，不处理失去焦点
-            blurTimer = setTimeout(() => {
-
-                console.info('失去焦点');
-                e.stopPropagation();
-                if(!this.quickSelectAll && focusTarget !== FocusTarget.CONTAINER){
-                    terminal.blur();
-                }
-
-                if (focusTarget === FocusTarget.CLIPBOARD) {
-                    focusTarget = FocusTarget.UNDEFINED;
-                }
-
-                clearTimeout(blurTimer);
-                blurTimer = 0;
-
-            }, 100);
-
-
-
-        });
+        // clipboard.addEventListener('blur', (e) => {
+        //     // 如果100ms，没有focus的话，就获取焦点。
+        //     // 否则，不处理失去焦点
+        //     blurTimer = setTimeout(() => {
+        //
+        //         console.info('失去焦点');
+        //         // terminal.echo("失去焦点\r\n");
+        //         console.info(window.innerHeight);
+        //         e.stopPropagation();
+        //
+        //         if(!this.quickSelectAll
+        //             && focusTarget !== FocusTarget.CONTAINER
+        //             // && document.activeElement !== document.body  // 这个条件会取消点击容器外面失去焦点的功能。
+        //             // 如果不加这个功能，当多次点击选中一行的时候，body会获取焦点，终端会失去焦点。
+        //         ){
+        //             terminal.blur();
+        //         }
+        //
+        //         if (focusTarget === FocusTarget.CLIPBOARD) {
+        //             focusTarget = FocusTarget.UNDEFINED;
+        //         }
+        //
+        //         clearTimeout(blurTimer);
+        //         blurTimer = 0;
+        //
+        //     }, 200);
+        //
+        //
+        //
+        // });
 
         window.addEventListener('blur', () => {
             focusTarget = FocusTarget.UNDEFINED;
@@ -358,6 +518,7 @@ export class EventHandler {
 
         // 窗口大小改变
         window.onresize = () => {
+
             if (!!resizingTimer) {
                 clearTimeout(resizingTimer);
                 resizingTimer = 0;
@@ -373,10 +534,35 @@ export class EventHandler {
             }, 100);
         };
 
+
+        /* js 监听ios手机键盘弹起和收起的事件 */
+        document.body.addEventListener('focusin', () => {  //软键盘弹起事件
+            console.log("键盘弹起, container.offsetTop:", clipboard.offsetTop, clipboard.scrollTop, clipboard.getBoundingClientRect());
+        });
+        document.body.addEventListener('focusout', () => { //软键盘关闭事件
+            console.log("键盘收起, container.offsetTop:", clipboard.offsetTop, clipboard.scrollTop, clipboard.getBoundingClientRect());
+        });
+
+
     }
 
     paste(data: string, clipboard: string, terminal: Terminal) {
         if(!!data && terminal.transceiver){
+
+            if(!(terminal.parser.applicationKeypad
+                || terminal.esParser.applicationCursorKeys
+                || terminal.bufferSet.isAlt)){
+                // 这三种情况不记录日志
+                if(data === "\x0d"){
+                    // 回车新增一行
+                    // terminal.eventLog.append("[Enter]");
+                    terminal.eventLog.add();
+                } else {
+                    terminal.eventLog.append(data);
+                }
+
+            }
+
             terminal.transceiver.send(JSON.stringify({
                 "cmd": data
             }));

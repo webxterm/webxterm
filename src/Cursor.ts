@@ -1,4 +1,5 @@
 import {CommonUtils} from "./common/CommonUtils";
+import {Styles} from "./Styles";
 
 /**
  * 终端光标
@@ -8,14 +9,14 @@ export class Cursor {
     // 是否显示
     private _show: boolean = true;
 
-    // 禁用
-    private _enable: boolean = false;
+    // 启用
+    private _enable: boolean = true;
 
     // 是否获取焦点
     private _focus: boolean = false;
 
     // 是否闪烁
-    private _blinking: boolean = false;
+    private _blinking: boolean = true;
 
     // 光标的形状
     private _cursorShape: string = "";
@@ -33,21 +34,25 @@ export class Cursor {
     // 数据更新版本号，默认为0，每次数据更新的时候，都会+1
     private version = 0;
 
-    private _instanceId: string = "";
+    readonly instanceId: string = "";
 
     // 额外添加的样式，来源于 DataBlock.getClassName()
-    // 当show = false的时候有效！！
     private _extraClass: string = "";
+
+    // 前景色和背景色
+    private _color: string = "";
+    private _backgroundColor: string = "";
 
     constructor(instanceId: string) {
         this.element.className = "cursor";
         this.contentElement.className = "content";
         this.outlineElement.className = "outline";
 
-        this._instanceId = instanceId;
+        this.instanceId = instanceId;
         this.value = "&nbsp;";
         this.element.appendChild(this.contentElement);
         this.element.appendChild(this.outlineElement);
+
     }
 
     get show(): boolean {
@@ -57,11 +62,9 @@ export class Cursor {
     set show(value: boolean) {
         this._show = value;
 
-        if (value) {
-            CommonUtils.removeClass(this.element, "cursor-hide");
+        if(value){
             CommonUtils.removeClass(this.currentElement, "cursor-hide");
         } else {
-            CommonUtils.addClass(this.element, "cursor-hide");
             CommonUtils.addClass(this.currentElement, "cursor-hide");
         }
 
@@ -73,6 +76,60 @@ export class Cursor {
 
     set enable(value: boolean) {
         this._enable = value;
+    }
+
+
+    get color(): string {
+        return this._color;
+    }
+
+    set color(value: string) {
+        if(this._color == value){
+            return;
+        }
+
+        // 光标内容选中颜色
+        Styles.add([
+            ".cursor.cursor-shape-block.focus::selection",
+            ".cursor.cursor-shape-block.focus::-moz-selection",
+            ".cursor.cursor-shape-block.focus::-webkit-selection"], {
+            "color": value,
+            "background-color": this.backgroundColor
+        }, this.instanceId);
+
+        // 设置边框色
+        Styles.addCursorStyle(".cursor > .outline", {
+            "border-color": value + " !important"
+        }, this.instanceId);
+
+        // 设置背景色
+        Styles.addCursorStyle(".cursor.cursor-shape-block.cursor-focus", {
+            "background-color": value + " !important",
+            "color": this.backgroundColor + " !important"
+        }, this.instanceId);
+
+        this._color = value;
+
+    }
+
+    get backgroundColor(): string {
+        return this._backgroundColor;
+    }
+
+    set backgroundColor(value: string) {
+        if(this._backgroundColor == value){
+            return;
+        }
+
+        // 光标内容选中颜色
+        // Styles.add([
+        //     ".cursor > .content::selection",
+        //     ".cursor > .content::-moz-selection",
+        //     ".cursor > .content::-webkit-selection"], {
+        //     "background-color": value,
+        // }, this.instanceId);
+
+        this._backgroundColor = value;
     }
 
     get focus(): boolean {
@@ -106,7 +163,7 @@ export class Cursor {
         this._blinking = value;
 
         if (value) {
-            if (this._cursorShape === 'Block') {
+            if (this._cursorShape == 'Block') {
                 CommonUtils.addClass(this.element, "cursor-blink");
                 // 当前在页面显示的元素
                 CommonUtils.addClass(this.currentElement, "cursor-blink");
@@ -116,7 +173,7 @@ export class Cursor {
                 CommonUtils.addClass(this.currentOutlineElement, "cursor-blink");
             }
         } else {
-            if (this._cursorShape === 'Block') {
+            if (this._cursorShape == 'Block') {
                 CommonUtils.removeClass(this.element, "cursor-blink");
                 // 当前在页面显示的元素
                 CommonUtils.removeClass(this.currentElement, "cursor-blink");
@@ -137,7 +194,7 @@ export class Cursor {
         this._cursorShape = value;
 
         const currentElement = this.currentElement;
-        if (value === "Block") {
+        if (value == "Block") {
 
             CommonUtils.removeClass(this.element, ["cursor-shape-underline", "cursor-shape-vertical-bar"]);
             // 当前在页面显示的元素
@@ -160,12 +217,12 @@ export class Cursor {
                 CommonUtils.addClass(this.currentOutlineElement, "cursor-blink");
             }
 
-            if (value === "Underline" || value === "Wide Underline") {
+            if (value == "Underline" || value == "Wide Underline") {
                 CommonUtils.removeClass(this.element, ["cursor-shape-block", "cursor-shape-vertical-bar"]);
                 CommonUtils.removeClass(currentElement, ["cursor-shape-block", "cursor-shape-vertical-bar"]);
                 CommonUtils.addClass(this.element, "cursor-shape-underline");
                 CommonUtils.addClass(currentElement, "cursor-shape-underline");
-            } else if (value === "I-Beam" || value === "Wide I-Beam") {
+            } else if (value == "I-Beam" || value == "Wide I-Beam") {
                 CommonUtils.removeClass(this.element, ["cursor-shape-block", "cursor-shape-underline"]);
                 CommonUtils.removeClass(currentElement, ["cursor-shape-block", "cursor-shape-underline"]);
                 CommonUtils.addClass(this.element, "cursor-shape-vertical-bar");
@@ -186,7 +243,7 @@ export class Cursor {
 
     set value(value: string) {
         this._value = value;
-        if (value.length === 0) {
+        if (value.length == 0) {
             value = "&nbsp;";
         }
         this.contentElement.innerHTML = value;
@@ -199,14 +256,6 @@ export class Cursor {
             CommonUtils.removeClass(this.element, this._extraClass.split(" "));
         }
         this._extraClass = value;
-    }
-
-    get instanceId() {
-        return this._instanceId;
-    }
-
-    set instanceId(value) {
-        this._instanceId = value;
     }
 
     get id(): string {
@@ -237,11 +286,19 @@ export class Cursor {
         // }
 
         this.version++;
-        this.element.id = this.id;
 
         if(!this.show){
-            CommonUtils.addClass(this.element, this._extraClass);
+            console.info("hide....");
+            let element = document.createElement("span");
+            element.id = this.id;
+            element.innerHTML = this.value;
+            element.className = this._extraClass;
+            return element.outerHTML;
         }
+
+        this.element.id = this.id;
+
+        CommonUtils.addClass(this.element, this._extraClass);
 
         return this.element.outerHTML;
     }

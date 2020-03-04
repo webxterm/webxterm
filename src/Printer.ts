@@ -1,7 +1,6 @@
 import {BufferLine} from "./buffer/BufferLine";
 import {Parser} from "./parser/Parser";
 import {Terminal} from "./Terminal";
-import {PlaceholderBlock} from "./buffer/PlaceholderBlock";
 import {Buffer} from "./buffer/Buffer";
 
 export class Printer {
@@ -69,49 +68,56 @@ export class Printer {
         for (let y = 1; y <= len; y++) {
 
             const line = this.activeBuffer.get(y);
-
-            // 脏行
-            if (!line.dirty) {
-                continue;
-            }
-
             this.printLine(line, true);
-
-            // 如果不是光标的行的话，就重置脏标记
-            if(line !== this.cursorLine){
-                line.dirty = false;
-            }
 
         }
 
     }
 
     /**
-     * 刷新脏链
+     * 打印脏行
      * @param line
      * @param displayCursor 是否显示光标
      */
     printLine(line: BufferLine, displayCursor: boolean = false){
 
+        // 如果没有脏块的话，直接返回。
+        if(!line.dirty){
+            return;
+        }
 
-        // 刷新脏链数据
-        let leftBlockClass: string = "",
-            rowContent: string = "",
-            values: string = "",
-            outerHTML: string = "",
-            printedCursor = false; // 是否已经输出了光标
+        if(line !== this.cursorLine){
+            line.dirty = false;
+        }
+
+        // 超链接 - 锚点
+        // let anchor: HTMLAnchorElement | undefined;
+        let element: HTMLSpanElement | undefined;
+        let leftClassName: string = "";
+        let strings: string[] = [];
+
+        // 当前行是否已经打印了光标，
+        // 这个需要判断是否在中间已经打印过，如果没有打印的话，需要在末尾打印。
+        // let printedCursor: boolean = false;
 
         for (let x = 1; x <= line.blocks.length; x++) {
 
             let block = line.get(x);
-            if (block instanceof PlaceholderBlock) {
+
+            if (block.empty) {
                 continue;
             }
 
-            let value = block.data;
+            let value = block.data,
+                className = block.getClassName();
 
-            // value.length === 0 || block.empty
-            // if(block.empty) continue;
+            // 超链接定义
+            // if(!!block.href){
+            //     anchor = document.createElement("a");
+            //     anchor.href = block.href;
+            // } else {
+            //     anchor = undefined;
+            // }
 
             // 特殊字符处理。
             switch (value) {
@@ -124,131 +130,142 @@ export class Printer {
                 case '<':
                     value = '&lt;';
                     break;
-                case '\t':
-                    block.attribute.tab = true;
-                    break;
+                // case '\t':
+                //     block.attribute.tab = true;
+                //     break;
             }
 
-
-            // 制作光标
             if(displayCursor
                 && this.parser.x === x
                 && line === this.cursorLine){
 
-                // 光标的位置
+                if(!!leftClassName && element){
+                    // 结束上一个。
+                    strings.push(element.outerHTML);
+                    element = undefined;
+                    leftClassName = "";
+                }
+
+                // 当前行需要制作光标
                 this.terminal.cursor.value = value;
 
-                if(!!values){
-                    if (!!outerHTML) {
-                        rowContent += outerHTML.replace("{}", values);
-                        values = "";
-                        outerHTML = "";
-                    } else {
-                        rowContent += values;
-                    }
+                const pref = this.terminal.preferences;
+                const attr = this.terminal.esParser.attribute;
+
+                // 光标的颜色。
+                // 需要先设置背景
+                if(!!block.attribute.backgroundColorClass || !!attr.backgroundColorClass){
+                    this.terminal.cursor.backgroundColor = pref.getColor(block.attribute.backgroundColorClass || attr.backgroundColorClass);
+                } else {
+                    this.terminal.cursor.backgroundColor = pref.defaultCursorColor ? pref.backgroundColor : pref.cursorBackgroundColor;
                 }
-                this.terminal.cursor.extraClass = block.getClassName();
-                rowContent += this.terminal.cursor.html;
-                printedCursor = true;
+
+                // 后设置前景
+                if(!!block.attribute.colorClass || !!attr.colorClass){
+                    this.terminal.cursor.color = pref.getColor(block.attribute.colorClass || attr.colorClass);
+                } else {
+                    this.terminal.cursor.color = pref.defaultCursorColor ? pref.color : pref.cursorColor;
+                }
+
+                this.terminal.cursor.extraClass = className;
+                // printedCursor = true;
+                strings.push(this.terminal.cursor.html);
 
                 continue;
-
             }
 
+            // 样式不同
+            // 含有len2(由于间隙问题，要求每一个字符一个span存储)
+            // 不存在样式。
+            if(!!className){
 
-            // 1，当前字符有样式
-            // 2，当前字符样式和上一个字符样式不一样。
-            // 3，当前字符样式含有len2(由于间隙问题，要求每一个字符一个span存储)
-            // 4，当前字符不存在样式。
-            const className = block.getClassName();
-            if (!!className) {
+                // 存在样式
+                if(!element){
+                    element = document.createElement("span");
+                    element.className = className;
+                }
 
-                if (leftBlockClass === className) {
-                    // 上一个字符和当前字符样式相等。
-                    if (block.attribute.len2) {
-                        // 结束上一个字符，如果含有样式
-                        if (!!outerHTML) {
-                            rowContent += outerHTML.replace("{}", values);
-                            values = "";
-                            outerHTML = "";
-                        }
+                if(block.attribute.len2){
+                    if(!!leftClassName)
+                        strings.push(element.outerHTML);
 
-                        rowContent += `<span class="${className}">${value}</span>`;
-
-                    } else {
-                        if (outerHTML === "")
-                            outerHTML = `<span class="${className}">{}</span>`;
-
-                        values += value;
-                    }
-
+                    element.className = className;
+                    element.innerHTML = value;
                 } else {
-                    // 上一个字符和当前字符样式不相等。
-                    // 结束上一个字符，如果含有样式
-                    if (!!outerHTML) {
-                        rowContent += outerHTML.replace("{}", values);
-                        values = "";
-                        outerHTML = "";
+                    // 普通的样式
+                    if(!!leftClassName && leftClassName !== className){
+                        strings.push(element.outerHTML);
+
+                        element.className = className;
                     }
 
-                    if (block.attribute.len2) {
-                        // 结束上一个字符，如果含有样式
-                        rowContent += `<span class="${className}">${value}</span>`;
+                    if(leftClassName === className){
+                        element.innerHTML = element.innerHTML + value;
                     } else {
-                        if (outerHTML === "")
-                            outerHTML = `<span class="${className}">{}</span>`;
-                        values += value;
+                        element.innerHTML = value;
                     }
 
                 }
 
+
             } else {
-                // 结束上一个字符，如果含有样式
-                if (!!outerHTML) {
-                    rowContent += outerHTML.replace("{}", values);
-                    values = "";
-                    outerHTML = "";
+
+                if(!!leftClassName && element){
+                    // 之前含有样式
+                    strings.push(element.outerHTML);
+
+                    element = undefined;
                 }
 
-                // 当前字符没有样式
-                rowContent += value;
+                // 没有存在样式
+                strings.push(value);
+
             }
 
-            leftBlockClass = className;
+            leftClassName = className;
         }
 
-        if (!!values) {
-            if (!!outerHTML) {
-                rowContent += outerHTML.replace("{}", values);
-            } else {
-                rowContent += values;
-            }
+        if(!!leftClassName && element){
+            strings.push(element.outerHTML);
         }
 
-        if(displayCursor
-            && line === this.cursorLine
-            && !printedCursor){
+        // if(displayCursor
+        //     && line === this.cursorLine
+        //     && !printedCursor){
+        //
+        //     this.terminal.cursor.value = "&nbsp;";
+        //
+        //
+        //     // 光标的颜色。
+        //     // 需要先设置背景
+        //     if(!!this.terminal.esParser.attribute.backgroundColorClass){
+        //         this.terminal.cursor.backgroundColor =
+        //             this.terminal.preferences.getColor(this.terminal.esParser.attribute.backgroundColorClass);
+        //     } else {
+        //         if(this.terminal.preferences.defaultCursorColor){
+        //             this.terminal.cursor.backgroundColor = this.terminal.preferences.backgroundColor;
+        //         } else {
+        //             this.terminal.cursor.backgroundColor = this.terminal.preferences.cursorBackgroundColor;
+        //         }
+        //     }
+        //
+        //     // 后设置前景
+        //     if(!!this.terminal.esParser.attribute.colorClass){
+        //         this.terminal.cursor.color =
+        //             this.terminal.preferences.getColor(this.terminal.esParser.attribute.colorClass);
+        //     } else {
+        //         if(this.terminal.preferences.defaultCursorColor){
+        //             this.terminal.cursor.color = this.terminal.preferences.color;
+        //         } else {
+        //             this.terminal.cursor.color = this.terminal.preferences.cursorColor;
+        //         }
+        //     }
+        //
+        //     strings.push(this.terminal.cursor.html);
+        // }
 
-            this.terminal.cursor.value = "&nbsp;";
-            rowContent += this.terminal.cursor.html;
-        }
-
-        line.element.innerHTML = rowContent;
+        line.element.innerHTML = strings.join("");
 
     }
-
-
-    appendDirtyLine(line: BufferLine){
-        this.printLine(line, false);
-        // this.printDirty();
-    }
-
-    // deleteDirtyLine(index: number){
-    //     this.dirtyLines.splice(index, 1);
-    // }
-    //
-    // getDirtyLineIndex(line: BufferLine){
-    //     return this.dirtyLines.indexOf(line);
-    // }
 
 }

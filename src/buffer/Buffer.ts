@@ -29,8 +29,8 @@ export class Buffer {
     private readonly type: string;
 
     // 横坐标
-    private _x: number = 1;
-    private _y: number = 1;
+    private _x: number = 0;
+    private _y: number = 0;
 
     // 行
     private _rows: number = 0;
@@ -53,9 +53,6 @@ export class Buffer {
     // 保存的行
     private _savedLines: BufferLine[] = [];
 
-    // 上一次更新
-    private _lastY: number = 0;
-
     constructor(rows: number, columns: number, scrollBack: boolean, type: string = "") {
         this._rows = rows;
         this._columns = columns;
@@ -64,6 +61,12 @@ export class Buffer {
 
         this.scrollTop = 1;
         this.scrollBottom = this._rows;
+
+        // 设置默认坐标点为1,1，原点为左上角。
+        // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
+        // Cursor Position [row;column] (default = [1,1]) (CUP).
+        this.y = 1;
+        this.x = 1;
     }
 
     get x(): number {
@@ -79,12 +82,12 @@ export class Buffer {
     }
 
     set y(value: number) {
-        this._lastY = this._y;
         this._y = value;
-    }
 
-    get lastY(): number {
-        return this._lastY;
+        let line: BufferLine = this.get(this._y);
+        if(line && !line.used){
+            line.used = true;
+        }
     }
 
     get savedX(): number {
@@ -105,6 +108,10 @@ export class Buffer {
 
     get lines(): BufferLine[] {
         return this._lines;
+    }
+
+    reset(){
+        this._lines = [];
     }
 
     get size(): number {
@@ -140,12 +147,9 @@ export class Buffer {
         return this.lineNum;
     }
 
-    get savedLineNum(): number {
-        return this._savedLineNum;
-    }
-
-    set savedLineNum(value: number) {
-        this._savedLineNum = value;
+    // 获取当前的行号
+    get currentLineNum(): number {
+        return this.lineNum;
     }
 
     get rows(): number {
@@ -184,7 +188,7 @@ export class Buffer {
                 let afterNode = this._lines[y - 1 + i].element;
                 let line = lines[i];
                 result.push(afterNode);
-                line.setAfterNode(afterNode);
+                // line.setAfterNode(afterNode);
                 this._lines.splice(y - 1 + i, 0, line);
             }
 
@@ -221,6 +225,7 @@ export class Buffer {
                 // 不是备用缓冲区或不需要保存行。
                 // 直接将其元素删除。
                 lines[i].element.remove();
+                lines = [];
             }
         }
         return lines;
@@ -233,41 +238,72 @@ export class Buffer {
      */
     resize(newRows: number, newCols: number) {
 
-        if (this._rows < newRows) {
-            for (let i = this._rows; i < newRows; i++) {
+        this._scrollBottom = newRows;
+
+        const rows  = this.lines.length;
+
+        const fragment = document.createDocumentFragment();
+
+        if (rows < newRows) {
+            for (let i = rows; i < newRows; i++) {
                 // 添加缓冲区行
-                this._lines.push(new BufferLine(newRows));
+                let line = new BufferLine(newRows);
+                this._lines.push(line);
+                fragment.appendChild(line.element);
             }
-        } else if (this._rows > newRows) {
+        } else if (rows > newRows) {
             // 删除
-            for (let i = newRows; i < this._rows; i++) {
+            let len = rows;
+            for (let i = newRows; i < len; i++) {
                 let deletedLine = this._lines.splice(i, 1);
-                deletedLine[0].element.remove();
+                if(deletedLine.length > 0)
+                    deletedLine[0].element.remove();
+
+                i -= 1;     // splice
+                len -= 1;   // splice
             }
         }
+        // else {
+        //     // newRows == this._row
+        // }
 
         if (this._columns > newCols) {
             // 删除列
             for (let i = 0; i < this._rows; i++) {
-                this._lines[i].blocks.splice(newCols, this._columns - newCols);
+                let line = this._lines[i];
+                if(!line) continue;
+                let len = line.blocks.length - newCols;
+                line.blocks.splice(newCols, len);
+                line.cols = newCols;
             }
-        } else {
+
+        } else if(this._columns < newCols){
             // 添加列
             for (let i = 0; i < this._rows; i++) {
-                for (let j = newCols; j < this._columns; j++) {
-                    this._lines[i].blocks.push(DataBlock.newEmptyBlock());
+                let line = this._lines[i];
+                if(!line) continue;
+                let len = newCols - line.blocks.length;
+                for (let j = 0; j < len; j++) {
+                    line.blocks.push(DataBlock.newEmptyBlock());
                 }
+                line.cols = newCols;
             }
         }
+        // else {
+        //     // newCols === this._columns
+        // }
 
         this._columns = newCols;
         this._rows = newRows;
+
+        return fragment;
 
     }
 
     clear() {
         this.y = 1;
         this.x = 1;
+        this.lineNum = 0;
 
         this.scrollTop = 1;
         this.scrollBottom = this._rows;
@@ -287,6 +323,7 @@ export class Buffer {
     getBlankLine() {
         let line = new BufferLine(this._columns);
         this.setDataId(line.element);
+        line.used = true;
         return line;
     }
 

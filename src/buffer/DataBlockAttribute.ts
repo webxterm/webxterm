@@ -4,7 +4,7 @@
 export class DataBlockAttribute {
 
     // 是否为\t
-    private _tab: boolean = false;
+    // private _tab: boolean = false;
 
     // 是否为双字节字符，/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(chr)
     private _len2: boolean = false;
@@ -42,21 +42,24 @@ export class DataBlockAttribute {
     // 背景颜色class
     private _backgroundColorClass: string = "";
 
-
-    get tab(): boolean {
-        return this._tab;
-    }
-
-    set tab(value: boolean) {
-        this._tab = value;
-    }
+    // get tab(): boolean {
+    //     return this._tab;
+    // }
+    //
+    // set tab(value: boolean) {
+    //     this._tab = value;
+    // }
+    // 版本号
+    private _version: number = 0;
 
     get len2(): boolean {
         return this._len2;
     }
 
     set len2(value: boolean) {
+        if(value == this._len2) return;
         this._len2 = value;
+        this._version += 1;
     }
 
     get bold(): boolean {
@@ -64,7 +67,9 @@ export class DataBlockAttribute {
     }
 
     set bold(value: boolean) {
+        if(value == this._bold) return;
         this._bold = value;
+        this._version += 1;
     }
 
     get faint(): boolean {
@@ -72,7 +77,9 @@ export class DataBlockAttribute {
     }
 
     set faint(value: boolean) {
+        if(value == this._faint) return;
         this._faint = value;
+        this._version += 1;
     }
 
     get italic(): boolean {
@@ -80,7 +87,9 @@ export class DataBlockAttribute {
     }
 
     set italic(value: boolean) {
+        if(value == this._italic) return;
         this._italic = value;
+        this._version += 1;
     }
 
     get underline(): boolean {
@@ -88,7 +97,9 @@ export class DataBlockAttribute {
     }
 
     set underline(value: boolean) {
+        if(value == this._underline) return;
         this._underline = value;
+        this._version += 1;
     }
 
     get slowBlink(): boolean {
@@ -96,7 +107,9 @@ export class DataBlockAttribute {
     }
 
     set slowBlink(value: boolean) {
+        if(value == this._slowBlink) return;
         this._slowBlink = value;
+        this._version += 1;
     }
 
     get rapidBlink(): boolean {
@@ -104,7 +117,9 @@ export class DataBlockAttribute {
     }
 
     set rapidBlink(value: boolean) {
+        if(value == this._rapidBlink) return;
         this._rapidBlink = value;
+        this._version += 1;
     }
 
     get inverse(): boolean {
@@ -112,7 +127,9 @@ export class DataBlockAttribute {
     }
 
     set inverse(value: boolean) {
+        if(value == this._inverse) return;
         this._inverse = value;
+        this._version += 1;
     }
 
     get invisible(): boolean {
@@ -120,7 +137,9 @@ export class DataBlockAttribute {
     }
 
     set invisible(value: boolean) {
+        if(value == this._invisible) return;
         this._invisible = value;
+        this._version += 1;
     }
 
     get crossedOut(): boolean {
@@ -128,7 +147,9 @@ export class DataBlockAttribute {
     }
 
     set crossedOut(value: boolean) {
+        if(value == this._crossedOut) return;
         this._crossedOut = value;
+        this._version += 1;
     }
 
     get colorClass(): string {
@@ -136,7 +157,9 @@ export class DataBlockAttribute {
     }
 
     set colorClass(value: string) {
+        if(value == this._colorClass) return;
         this._colorClass = value;
+        this._version += 1;
     }
 
     get backgroundColorClass(): string {
@@ -144,6 +167,12 @@ export class DataBlockAttribute {
     }
 
     set backgroundColorClass(value: string) {
+        if(value == this._backgroundColorClass) return;
         this._backgroundColorClass = value;
+        this._version += 1;
+    }
+
+    get version(): number {
+        return this._version;
     }
 }

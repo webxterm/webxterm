@@ -3,43 +3,46 @@ import {BufferLine} from "./BufferLine";
 import {DataBlock} from "./DataBlock";
 
 // http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-The-Alternate-Screen-Buffer
-
 export class BufferSet {
 
-    private readonly _normal: Buffer;
-    private readonly _alt: Buffer;
-    private _activeBuffer: Buffer;
+    private _normal: Buffer | undefined;
+    private _alt: Buffer | undefined;
+    private _activeBuffer: Buffer | undefined;
 
-    constructor(rows: number, columns: number) {
-
+    init(rows: number, columns: number){
         // 默认缓冲区
         this._normal = new Buffer(rows, columns, true, "normal");
         this._normal.fillRows();
 
         // 备用缓冲区
         this._alt = new Buffer(rows, columns, false, "alt");
-        this._alt.fillRows();
         this._activeBuffer = this._normal;
-
     }
 
     get normal(): Buffer {
-        return this._normal;
+        return <Buffer>this._normal;
     }
 
     get alt(): Buffer {
-        return this._alt;
+        return <Buffer>this._alt;
     }
 
     get activeBuffer(): Buffer {
-        return this._activeBuffer;
+        return <Buffer>this._activeBuffer;
     }
 
     get activeBufferLine(): BufferLine {
+        if(!this._activeBuffer){
+            throw new Error("_activeBuffer is " + this._activeBuffer);
+        }
+
         return this._activeBuffer.get(this._activeBuffer.y);
     }
 
     get size(): number {
+        if(!this._activeBuffer){
+            throw new Error("_activeBuffer is " + this._activeBuffer);
+        }
         return this._activeBuffer.lines.length;
     }
 
@@ -47,14 +50,7 @@ export class BufferSet {
      * 切换到默认缓冲区
      */
     activateNormalBuffer(){
-
         if(this._activeBuffer === this._normal) return;
-
-        this._normal.x = this._alt.x;
-        this._normal.y = this._alt.y;
-
-        this._alt.clear();
-
         this._activeBuffer = this._normal;
     }
 
@@ -63,10 +59,31 @@ export class BufferSet {
      */
     activateAltBuffer(){
 
-        if(this._activeBuffer === this._alt) return document.createDocumentFragment();
+        if(this._activeBuffer === this._alt) return;
 
-        this._alt.x = this._normal.x;
-        this._alt.y = this._normal.y;
+        // ==> 为了解决内容没有充满缓冲区的时候，切换切换到备用缓冲区的时候，会有一段的空白。
+
+        // 删除默认缓冲区没有使用过的行
+        if(!this._normal){
+            throw new Error("_normal is " + this._normal);
+        }
+
+        if(!this._alt){
+            throw new Error("_alt is " + this._alt);
+        }
+
+        for(let i = 0; i < this._normal.size; i++){
+            let line: BufferLine = this._normal.lines[i];
+            if(line && !line.used){
+                // 没有试过用
+                line.element.remove();
+            }
+        }
+
+        this._alt.clear();
+
+        this._alt.reset();
+        this._alt.fillRows();
 
         this._activeBuffer = this._alt;
     }
@@ -76,9 +93,21 @@ export class BufferSet {
      * @param newRows
      * @param newCols
      */
-    resize(newRows: number, newCols: number){
-        this._normal.resize(newRows, newCols);
-        this._alt.resize(newRows, newCols);
+    resize(newRows: number, newCols: number): DocumentFragment | undefined {
+
+        if(this.isNormal){
+            // 使用默认缓冲区
+            if(this._alt)
+                this._alt.resize(newRows, newCols);
+            if(this._normal)
+                return this._normal.resize(newRows, newCols);
+        } else {
+            // 使用备用缓冲区
+            if(this._normal)
+                this._normal.resize(newRows, newCols);
+            if(this._alt)
+                return this._alt.resize(newRows, newCols);
+        }
     }
 
     /**
@@ -99,7 +128,8 @@ export class BufferSet {
      * 清除回滚的行
      */
     clearSavedLines(){
-        this._normal.clearSavedLines();
+        if(this._normal)
+            this._normal.clearSavedLines();
     }
 
     /**
@@ -114,15 +144,24 @@ export class BufferSet {
         function printLine(line: BufferLine) {
             let str = "";
             for(let block of line.blocks){
-                if(block instanceof DataBlock){
-                    str += block.data;
-                }
+                str += block.data;
             }
             return str + "\r\n";
         }
 
+        if(!this._normal){
+            throw new Error("_normal is " + this._normal);
+        }
+
         for(let savedLine of this._normal.savedLines){
             strings += printLine(savedLine);
+        }
+
+        // 如果当前的缓冲区是备用缓冲区的话，需要将默认的缓冲区的内容也输出、
+        if(this.isAlt){
+            for(let bufferLine of this._normal.lines){
+                strings += printLine(bufferLine);
+            }
         }
 
         for(let bufferLine of this.activeBuffer.lines){

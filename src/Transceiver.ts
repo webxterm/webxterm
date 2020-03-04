@@ -6,12 +6,9 @@ export class Transceiver {
 
     private _socket: WebSocket | undefined;
 
-    // 数据缓冲区
-    private _buffer: string[] = [];
+    private _version: {[key: string] : string} | undefined;
 
-    private _version: object | undefined;
-
-    private terminal: Terminal;
+    readonly terminal: Terminal;
 
     // 连接成功
     private connected: boolean = false;
@@ -44,11 +41,17 @@ export class Transceiver {
                 reject(e);
             };
             this._socket.onmessage = (e) => {
+                const message: string = e.data;
+                console.info("message:", message);
                 if (!this._version) {
-                    this._version = JSON.parse(e.data);
+                    // 有可能数据和下一个chunk合并返回的情况
+                    const endIndex = message.indexOf("}") + 1;
+                    this._version = JSON.parse(message.substring(message.indexOf("{"), endIndex));
+                    if(message.length - 1 !== endIndex){
+                        this.terminal.pushMessage(message.substring(endIndex));
+                    }
                 } else {
-                    this._buffer.push(e.data);
-                    this.terminal.startPrinter();
+                    this.terminal.pushMessage(message);
                 }
             };
         });
@@ -65,20 +68,8 @@ export class Transceiver {
         }
     }
 
-
     get socket(): WebSocket | undefined {
         return this._socket;
-    }
-
-    /**
-     * 获取缓冲区的数据
-     */
-    get buffer(): string[] {
-        return this._buffer;
-    }
-
-    get chunk(): string[] {
-        return this._buffer.splice(0, this._buffer.length);
     }
 
     /**

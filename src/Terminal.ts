@@ -8,39 +8,18 @@ import {CommonUtils} from "./common/CommonUtils";
 import {Styles} from "./Styles";
 import {Transceiver} from "./Transceiver";
 import {Parser} from "./parser/Parser";
-import {EventHandler} from "./EventHandler";
+import {EventHandler} from "./input/EventHandler";
 import {Cursor} from "./Cursor";
 import {Printer} from "./Printer";
 import {BufferSet} from "./buffer/BufferSet";
+import {EventLog} from "./input/EventLog";
+import {EscapeSequenceParser} from "./parser/EscapeSequenceParser";
+import {OscParser} from "./parser/OscParser";
+import {SSHServerInfo} from "./SSHServerInfo";
 
 export class Terminal {
 
-    private readonly _preferences: Preferences;
     private _eventMap: { [key: string]: any } = {};
-
-    // 终端实例
-    private readonly instance: HTMLElement;
-
-    private readonly _instanceId: string = "";
-
-    // 终端实例类名
-    static brand: string = "webxterm";
-    // 终端容器
-    private readonly _container: HTMLDivElement = document.createElement("div");
-    // 视图
-    private readonly _viewport: HTMLDivElement = document.createElement("div");
-    // 待提交
-    private readonly _presentation: HTMLDivElement = document.createElement("div");
-    // 粘贴板
-    private readonly _clipboard: HTMLTextAreaElement = document.createElement("textarea");
-
-    // 视图初始化完成
-    private readonly onRender: Function;
-
-    // 字符
-    private measureSpan: HTMLSpanElement = document.createElement("span");
-    // 行
-    private measureDiv: HTMLSpanElement = document.createElement("div");
 
     // 字符尺寸
     private _charWidth: number = 0;
@@ -51,71 +30,121 @@ export class Terminal {
     // 行数
     private _rows: number = 0;
 
-    private styles: Styles = Styles.getStyles();
-
     // 是否可用
     private enable: boolean = true;
 
-    // Websocket服务器
-    private readonly wsServer: string;
+    // 是否可以滚动到底部
+    private _enableScrollToBottom: boolean = false;
 
-    private _transceiver: Transceiver | undefined;
+    // 是否已经初始化
+    init: boolean = false;
+    // 是否已经就绪
+    isReady: boolean = false;
 
     // 消息队列定时器
     private messageQueueTimer: number = 0;
 
-    private readonly _parser: Parser;
-    private eventHandler: EventHandler;
+    private messageQueue: string[] = [];
 
-    private readonly _cursor: Cursor;
+    private _transceiver: Transceiver | undefined;
 
-    private _scrollToBottom: boolean = true;
 
-    // 是否已经初始化
-    init: boolean = false;
+    // 终端实例
+    readonly instance: HTMLElement;
+    readonly instanceId: string = "";
+    // 终端实例类名
+    static brand: string = "webxterm";
+    // 终端容器
+    readonly container: HTMLDivElement = document.createElement("div");
+    // 视图
+    readonly viewport: HTMLDivElement = document.createElement("div");
+    // 待提交
+    readonly presentation: HTMLDivElement = document.createElement("div");
+    // 粘贴板
+    readonly clipboard: HTMLTextAreaElement = document.createElement("textarea");
 
+    // 视图初始化完成
+    readonly onRender: Function;
+    // 字符
+    readonly measureSpan: HTMLSpanElement = document.createElement("span");
+    readonly measureDiv: HTMLSpanElement = document.createElement("div");
+
+    // Websocket服务器
+    readonly wsServer: string;
+
+    // 解析器
+    readonly parser: Parser;
+    // 序列解析器
+    readonly esParser: EscapeSequenceParser;
+    // 系统命令解析器
+    readonly oscParser: OscParser;
+    // 时间处理器
+    readonly eventHandler: EventHandler;
+    // 光标
+    readonly cursor: Cursor;
     // 打印机
-    private readonly _printer: Printer;
-
+    readonly printer: Printer;
     // 缓冲区
-    private readonly _bufferSet: BufferSet;
+    readonly bufferSet: BufferSet;
+    // 时间记录器
+    readonly eventLog: EventLog;
+    // 偏好设置
+    readonly preferences: Preferences;
+    // 连接的服务器信息
+    readonly sshServerInfo: SSHServerInfo;
+
 
     constructor(args: { [key: string]: any }) {
-        const now = new Date();
-        const today = new Date(now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate()).getTime();
-        this._instanceId = "ins_" + Math.abs(now.getTime() - today);
+        // const now = new Date();
+        // const today = new Date(now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate()).getTime();
+        this.instanceId = "ins_" + new Date().getTime();
 
         this.instance = args["instance"];
         this.onRender = args["render"];
         this.wsServer = args["wsServer"];
 
         // 光标
-        this._cursor = new Cursor(this._instanceId);
+        this.cursor = new Cursor(this.instanceId);
 
-        this._preferences = new Preferences(this);
-        this._preferences.init();
+        // 偏好设置
+        this.preferences = new Preferences(this);
+        this.preferences.init();
+
+        this.cursor.blinking = this.preferences.cursorBlinking;
+        this.cursor.enable = true;
 
         this.initViewPort();
 
-        this._parser = new Parser(this);
+        // 解析器
+        this.parser = new Parser(this);
+        this.esParser = new EscapeSequenceParser(this, this.parser);
+        this.oscParser = new OscParser(this, this.parser);
+
+        // 事件处理
         this.eventHandler = new EventHandler();
         this.eventHandler.listen(this);
 
         // 设置活跃缓冲区为当前的默认缓冲区
-        this._bufferSet = new BufferSet(this.rows, this.columns);
-        this.addBufferFillRows();
+        this.bufferSet = new BufferSet();
 
-        this._printer = new Printer(this);
+        // 打印机
+        this.printer = new Printer(this);
+
+        // 时间记录
+        this.eventLog = new EventLog();
+
+        // 需要连接的服务器信息
+        this.sshServerInfo = new SSHServerInfo();
 
     }
 
     // 回调函数绑定
     on(typeName: string | { [key: string]: any }, listener?: (args: object) => void): Terminal {
-        if (typeof typeName === 'string') {
+        if (typeof typeName == 'string') {
             if (listener) {
                 this._eventMap[typeName] = listener;
             }
-        } else if (typeof typeName === 'object') {
+        } else if (typeof typeName == 'object') {
             for (let key in typeName) {
                 const sk = key + "";
                 this._eventMap[sk] = typeName[sk];
@@ -138,27 +167,32 @@ export class Terminal {
         //              --textarea.clipboard(粘贴板)
 
         CommonUtils.addClass(this.instance, Terminal.brand);
-        this.instance.setAttribute("instance", this._instanceId);
+        this.instance.setAttribute("instance", this.instanceId);
 
         // 终端容器
-        this.instance.appendChild(this._container);
-        this._container.className = "container";
+        this.instance.appendChild(this.container);
+        this.container.className = "container";
 
         // 视图
-        this._container.appendChild(this._viewport);
-        this._viewport.className = "viewport";
+        this.container.appendChild(this.viewport);
+        this.viewport.className = "viewport";
+
 
         // 待提交区域
-        this._container.appendChild(this._presentation);
-        this._presentation.className = "presentation";
+        this.container.appendChild(this.presentation);
+        this.presentation.className = "presentation";
 
         // 粘贴板
-        this._presentation.appendChild(this._clipboard);
-        this._clipboard.className = "clipboard";
+        this.presentation.appendChild(this.clipboard);
+        this.clipboard.className = "clipboard";
+        // 首字母大写取消
+        this.clipboard.autocapitalize = "off";
+        // 关闭记录输入的内容
+        this.clipboard.autocomplete = "off";
 
 
         // 默认字符大小
-        [this.charWidth, this.charHeight] = Preferences.fontSizes[Preferences.defaultFontSize];
+        [this.charWidth, this.charHeight] = this.preferences.defaultFontSizeVal;
 
         // 渲染完成
         this.onRender({
@@ -173,7 +207,7 @@ export class Terminal {
                 this.ready();
             });
         } else {
-            if (document.readyState === "complete") {
+            if (document.readyState == "complete") {
                 // 文档加载完成、
                 setTimeout(() => {
                     this.ready();
@@ -191,7 +225,7 @@ export class Terminal {
     }
 
     private completed(event: Event): void {
-        if (document.readyState === "complete" || event.type === 'load') {
+        if (document.readyState == "complete" || event.type == 'load') {
             setTimeout(() => {
                 this.ready();
             }, 1000);
@@ -202,54 +236,24 @@ export class Terminal {
         console.info('ready...');
         // 获取字符的尺寸
         this.measure();
-
-        this.startPrinter();
     }
 
-
-    get viewport(): HTMLDivElement {
-        return this._viewport;
-    }
-
-
-    get presentation(): HTMLDivElement {
-        return this._presentation;
-    }
-
-    get container(): HTMLDivElement {
-        return this._container;
-    }
-
-    get clipboard(): HTMLTextAreaElement {
-        return this._clipboard;
-    }
-
-    get instanceId(): string {
-        return this._instanceId;
-    }
-
-    get parser(): Parser {
-        return this._parser;
-    }
-
-    get printer(): Printer {
-        return this._printer;
-    }
-
-    set scrollToBottom(value: boolean) {
-        this._scrollToBottom = value;
-    }
-
-    get preferences(): Preferences {
-        return this._preferences;
+    set enableScrollToBottom(value: boolean) {
+        this._enableScrollToBottom = value;
     }
 
     get eventMap(): { [p: string]: any } {
         return this._eventMap;
     }
 
-    get bufferSet(): BufferSet {
-        return this._bufferSet;
+    /**
+     * 将输入存入消息队列中
+     * @param data
+     */
+    pushMessage(data: string){
+        console.info("pushMessage:", data);
+        this.messageQueue.push(data);
+        this.startPrinter();
     }
 
     /**
@@ -257,7 +261,7 @@ export class Terminal {
      */
     measure(): void {
 
-        this._viewport.appendChild(this.measureDiv);
+        this.viewport.appendChild(this.measureDiv);
         this.measureSpan.innerHTML = 'W';
         this.measureSpan.className = 'measure';
         this.measureDiv.appendChild(this.measureSpan);
@@ -268,7 +272,22 @@ export class Terminal {
 
         console.info('修改尺寸：' + this.rows + "," + this.columns);
 
-        this.resizeRemote();
+        // 缓冲区初始化
+        this.bufferSet.init(this.rows, this.columns);
+        this.addBufferFillRows();
+        // 第一行设置为已被使用。
+        this.bufferSet.activeBufferLine.used = true;
+
+        // 终端已就绪
+        this.isReady = true;
+
+        this.echo("Welcome to WebXterm, a web Terminal Emulator.\r\n\r\n");
+
+        if(this.messageQueue.length > 0){
+            this.startPrinter();
+        }
+
+        this.connectServer();
 
     }
 
@@ -286,7 +305,14 @@ export class Terminal {
         const height = this.container.getBoundingClientRect().height;
         this._rows = Math.floor(height / this._charHeight);
 
+        // 更新缓冲区
+        let fragment = this.parser.bufferSet.resize(this.rows, this.columns);
+        if(fragment) this.viewport.appendChild(fragment);
+
         this.resizeRemote();
+
+        // 滚动到底部
+        this.scrollToBottom();
 
     }
 
@@ -297,7 +323,7 @@ export class Terminal {
 
         // 设置宽度
         if(this.transceiver){
-            this.parser.bufferSet.resize(this.rows, this.columns);
+
             this.transceiver.send(JSON.stringify({
                 size: {
                     w: this.columns,
@@ -315,7 +341,7 @@ export class Terminal {
         this._charWidth = value;
 
         // 获取行数
-        this._viewport.appendChild(this.measureDiv);
+        this.viewport.appendChild(this.measureDiv);
 
         console.info("value:" + value);
 
@@ -326,11 +352,11 @@ export class Terminal {
 
         // Styles.add(".viewport", {
         //     "padding-right": paddingRight + "px"
-        // }, this._instanceId);
+        // }, this.instanceId);
 
         Styles.add(".len2", {
             "width": value * 2 + "px"
-        }, this._instanceId);
+        }, this.instanceId);
 
         this.measureDiv.remove();
     }
@@ -342,10 +368,6 @@ export class Terminal {
 
     get rows(): number {
         return this._rows;
-    }
-
-    get cursor(): Cursor {
-        return this._cursor;
     }
 
     get transceiver(): Transceiver | undefined {
@@ -362,12 +384,12 @@ export class Terminal {
         Styles.add(".len2", {
             "height": value + "px",
             "line-height": value + "px"
-        }, this._instanceId);
+        }, this.instanceId);
 
         Styles.add(".viewport-row", {
             "height": value + "px",
             "line-height": value + "px"
-        }, this._instanceId);
+        }, this.instanceId);
 
         // 计算高度
         const height = this.container.getBoundingClientRect().height;
@@ -375,7 +397,7 @@ export class Terminal {
 
         Styles.add(".presentation", {
             "height": (height - this._rows * value) + "px"
-        }, this._instanceId);
+        }, this.instanceId);
 
     }
 
@@ -388,12 +410,34 @@ export class Terminal {
         return this._charHeight;
     }
 
+    /**
+     * 打开服务器
+     * @param hostname
+     * @param username
+     * @param password
+     * @param port
+     * @param pkey
+     */
     open(hostname: string,
                 username: string,
                 password: string,
                 port: number = 22,
                 pkey: string = ""): Terminal {
 
+        // 加入等待初始化完成？
+        this.sshServerInfo.hostname = hostname;
+        this.sshServerInfo.username = username;
+        this.sshServerInfo.password = password;
+        this.sshServerInfo.port = port;
+        this.sshServerInfo.pkey = pkey;
+
+        return this;
+    }
+
+    /**
+     * 连接SSH服务器
+     */
+    private connectServer(){
 
         this._transceiver = new Transceiver(this.wsServer, this);
         this._transceiver.open().then((e: any) => {
@@ -403,10 +447,10 @@ export class Terminal {
             if(this._transceiver){
                 this._transceiver.send(JSON.stringify({
                     target: {
-                        hostname: hostname,
-                        username: username,
-                        password: password,
-                        port: port
+                        hostname: this.sshServerInfo.hostname,
+                        username: this.sshServerInfo.username,
+                        password: this.sshServerInfo.password,
+                        port: this.sshServerInfo.port
                     },
                     size: {
                         w: this.columns,
@@ -427,22 +471,21 @@ export class Terminal {
             }
 
         });
-
-        return this;
     }
 
     /**
      * 打印文本
      * @param text
      */
-    echo(text: string) {
+    private echo(text: string) {
+        this.parser.parse(text);
+    }
 
-        //
-        console.info("echo:" + text);
-
-        this._parser.parse(text);
-
-
+    /**
+     * 将数据写入终端，这个方法会等待终端就绪。
+     */
+    write(text: string){
+        this.messageQueue.push(text);
     }
 
     /**
@@ -450,59 +493,108 @@ export class Terminal {
      */
     startPrinter() {
 
-        if (!!this.messageQueueTimer) return;
+        if (this.messageQueueTimer) {
+            return;
+        }
 
         this.messageQueueTimer = setInterval(() => {
 
-            if(this._transceiver) {
-
-                let chunk = this._transceiver.chunk;
-
-                if (chunk.length > 0) {
-                    this.echo(chunk.join(""));
-                } else {
-                    clearInterval(this.messageQueueTimer);
-                    this.messageQueueTimer = 0;
-                }
+            // 如果终端没有就绪的话，就不要输出。
+            if(!this.isReady){
+                clearInterval(this.messageQueueTimer);
+                this.messageQueueTimer = 0;
+                return;
             }
+
+            const len = this.messageQueue.length;
+            if(len == 0) {
+                clearInterval(this.messageQueueTimer);
+                this.messageQueueTimer = 0;
+            } else {
+                const chunk = this.messageQueue.splice(0, len);
+                console.info("chunk:", chunk);
+                this.echo(chunk.join(""));
+            }
+
         }, 0);
     }
 
-    bell(): void{
+    /**
+     * 虚拟响铃，通过修改背景颜色实现。
+     */
+    bell(){
+        this.container.style.backgroundColor = this.preferences.visualBellColor;
+        this.container.style.transition = "0.25s";
+        setTimeout(() => {
+            this.container.style.backgroundColor = "";
+            this.container.style.transition = "";
+        }, 250);
 
     }
 
+    /**
+     * 终端获取焦点
+     */
     focus(): void {
-        this._cursor.focus = true;
+        this.cursor.focus = true;
     }
 
+    /**
+     * 终端失去焦点
+     */
     blur(): void {
-        this._cursor.focus = false;
+        this.cursor.focus = false;
     }
 
-    reverseVideo() : void {
-
+    /**
+     * 反转颜色
+     */
+    reverseVideo() {
+        CommonUtils.addClass(this.container, 'inverse');
     }
 
-    normalVideo() : void {
-
+    /**
+     * 正常颜色
+     */
+    normalVideo() {
+        CommonUtils.removeClass(this.container, 'inverse');
     }
 
-    showCursor() : void {
-        this._cursor.show = true;
-        // 处理当前的光标
+    /**
+     * 显示光标
+     */
+    showCursor() {
+        this.cursor.show = true;
     }
 
-    hideCursor(): void {
-        this._cursor.show = false;
+    /**
+     * 隐藏光标
+     */
+    hideCursor() {
+        console.info("hideCursor...");
+        this.cursor.show = false;
     }
 
-    scrollToBottomOnInput(): void {
-        if(this._preferences.scrollToBottomOnInput && this._scrollToBottom){
-            this.container.scrollTop = this.container.scrollHeight;
+    /**
+     * 当输入的时候，滚动到底部。
+     */
+    scrollToBottomOnInput() {
+
+        if(this.preferences.scrollToBottomOnInput && this._enableScrollToBottom){
+            this.scrollToBottom();
         }
     }
 
+    /**
+     * 滚动到底部
+     */
+    scrollToBottom(){
+        this.container.scrollTop = this.container.scrollHeight;
+    }
+
+    /**
+     * 将缓冲区的所有行添加到viewport
+     */
     addBufferFillRows(){
 
         let fragment = document.createDocumentFragment();
@@ -512,6 +604,20 @@ export class Terminal {
         }
         this.viewport.appendChild(fragment);
     }
-    
+
+    /**
+     * 注册重新连接事件
+     */
+    registerConnect(){
+        document.addEventListener('keydown', (e) => {
+            if(e.key === 'Enter'){
+                // 按了回车键
+                if(this.transceiver)
+                    this.transceiver.send(JSON.stringify({cmd: '\x0d'}));
+            }
+            e.stopPropagation();
+            e.preventDefault();
+        });
+    }
 
 }

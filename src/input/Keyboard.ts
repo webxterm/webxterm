@@ -98,6 +98,8 @@ export class Keyboard {
 
     keyMap: { [key: string]: string } = {};
 
+    // 229处理
+    composition: string[] = [];
 
     // See http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-PC-Style-Function-Keys
     cursorKeysNormalMapping() {
@@ -305,19 +307,6 @@ export class Keyboard {
             return "";
         }
 
-        // if (e.which === 229) {
-        //     // "Process": 229,
-        //     // 手机端 e.which
-        //     // d => 229
-        //     // a => 229
-        //     // t => 229
-        //     // e => 229
-        //
-        //     // date => \x08date
-        //
-        //     return "";
-        // }
-
         if(cursorApplicationMode){
             this.cursorKeysApplicationMapping();
         } else {
@@ -339,7 +328,7 @@ export class Keyboard {
 
             console.info("modifiers:" + modifiers);
 
-            if(modifiers === 4){
+            if(modifiers == 4){
                 return this.combinationKeys["CTRL+" + key.toUpperCase()];
             }
 
