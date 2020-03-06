@@ -36,7 +36,7 @@
             document.title = title;
             console.info("updateTitle:" + title);
         }
-    }).open('192.168.0.106','【用户名】', '【密码】',【端口号);
+    }).open('【主机名】','【用户名】', '【密码】',【端口号);
   </script>
   </html>
   </code>
