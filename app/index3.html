@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, minimal-ui"/>
+    <meta name="x5-fullscreen" content="true">
+    <meta name="full-screen" content="yes">
+    <meta name="browsermode" content="application">
+    <meta name="x5-page-mode" content="app">
+    <meta http-equiv="Expires" content="0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Cache-control" content="no-cache">
+    <meta http-equiv="Cache" content="no-cache">
+
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-touch-fullscreen" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+
+
+    <link rel="stylesheet" href="../css/terminal.css?version=1.2">
+    <script type="text/javascript" src="../dist/webxterm.js?version=1.8"></script>
+    <style>
+        .key-item {
+            width: 36px;
+            display: inline-block;
+            text-align: center;
+            line-height: 34px;
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 4px;
+            font-weight: bold;
+            margin-left: 7px;
+        }
+
+        .key-item:last-child{
+            margin-right: 7px;
+        }
+
+        img{
+            height: 100vh;
+        }
+
+    </style>
+</head>
+<body>
+
+
+    <div style="display: flex; flex-direction: column">
+
+        <div id="test" style="display: flex; justify-content: center; background-color: #333;">
+<!--            <img id="viewport2" style="height: 100vh;">-->
+            <canvas id="canvas" style="height: 100vh;">
+                <span>您的浏览器不支持！！！</span>
+            </canvas>
+        </div>
+
+
+
+    </div>
+
+
+<script type="text/javascript">
+
+    let canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext('2d');
+    const height = canvas.getBoundingClientRect().height;
+    const width = canvas.getBoundingClientRect().width;
+    let isUpdateSize = false;
+    const imgObj = new Image();
+
+    function draw(data){
+
+        imgObj.onload = drawImageActualSize;
+        imgObj.src = URL.createObjectURL(data);
+
+        function drawImageActualSize(){
+
+            const r = height / imgObj.height;
+            if(!isUpdateSize){
+                canvas.setAttribute("width", (r * imgObj.width * 2) + "");
+                canvas.setAttribute("height", (height * 2) + "");
+            }
+
+            ctx.drawImage(imgObj, 0, 0, r * imgObj.width*2, height*2);
+            // 回收URL
+            URL.revokeObjectURL(imgObj.src);
+        }
+
+    }
+
+
+    let websocket = new WebSocket("ws://a.baikai.top:8890");
+    // let websocket = new WebSocket("wss://a.baikai.top:444/webrdp");
+    // websocket.binaryType = "arraybuffer";
+    websocket.onopen = (e) => {
+        console.info(e)
+        websocket.send(JSON.stringify({
+            "xid": "1002",
+            "pwd": "11111"
+        }));
+
+        setTimeout(() => {
+            // 连接目标机器
+            websocket.send(JSON.stringify({
+                master: {
+                    "xid": "1001",
+                    "pwd": "11111"
+                }
+            }))
+        }, 1000);
+    }
+
+    websocket.onmessage = (e) => {
+
+        // console.info(e);
+
+        const data = e.data;
+        // console.info(e);
+
+        // if(typeof(data) === "string"){
+        //
+        //     console.info("字符串数据！", data);
+        //
+        // } else {
+        //     // 二进制数据
+        //
+        //     // let reader = new FileReader();
+        //     //
+        //     // reader.onload = function (event) {
+        //     //
+        //     //     if(event.target.readyState === FileReader.DONE){
+        //     //         // 解析完成
+        //     //         const url = event.target.result;
+        //     //         console.info("url", url);
+        //     //         viewport.src = URL.createObjectURL(data);
+        //     //     }
+        //     // };
+        //     //
+        //     // reader.readAsBinaryString(data)
+        //
+        //     viewport.src = URL.createObjectURL(data);
+        //
+        // }
+
+        // let a = new FileReader();
+        // a.onload = function (e) {
+        //     if(e.target.readyState === 2){
+        //         const imgObj = new Image();
+        //         imgObj.src = e.target.result + "";
+        //
+        //
+        //         imgObj.onload = function(){
+        //
+        //             const r = height / imgObj.height;
+        //
+        //             if(!isUpdateSize){
+        //                 canvas.setAttribute("width", (r * imgObj.width * 2) + "");
+        //                 canvas.setAttribute("height", (height * 2) + "");
+        //             }
+        //
+        //             ctx.drawImage(imgObj, 0, 0, r * imgObj.width*2, height*2);
+        //
+        //         }
+        //
+        //     }
+        // }
+        // a.readAsDataURL(data);
+
+        // let img = document.createElement("img");
+        // img.src = URL.createObjectURL(data);
+        // img.onload = function(){
+        //     URL.revokeObjectURL(this.src);
+        //     if(lastImg) lastImg.remove();
+        //     viewport.appendChild(this);
+        //     lastImg = this;
+        // }
+
+
+        if(typeof(data) === "string"){
+            console.info(data);
+        } else {
+            // if(this.timer === 0){
+            //     startTimer();
+            // }
+            draw(data);
+        }
+
+
+
+        // const imgObj = new Image();
+        // imgObj.src = URL.createObjectURL(data);
+        // imgObj.onload = function(){
+        //
+        //     const r = height / imgObj.height;
+        //
+        //     if(!isUpdateSize){
+        //         canvas.setAttribute("width", (r * imgObj.width * 2) + "");
+        //         canvas.setAttribute("height", (height * 2) + "");
+        //     }
+        //
+        //     ctx.drawImage(this, 0, 0, r * imgObj.width*2, height*2);
+        // };
+
+
+    }
+
+    websocket.onerror = (e) => {
+        console.info(e)
+    }
+
+    websocket.onclose = (e) => {
+        console.info(e)
+    }
+
+
+</script>
+</body>
+</html>

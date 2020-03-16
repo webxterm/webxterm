@@ -74,7 +74,8 @@
 
     let terminal = new webxterm.Terminal({
         instance: el,
-        wsServer: "ws://a.baikai.top:8899",
+        wsServer: "wss://a.baikai.top:1443/webxterm",
+        // wsServer: "ws://a.baikai.top:8899",
         // wsServer: "ws://192.168.0.100:8899",
         render: (args) => {
             console.info(args.instance);
@@ -99,6 +100,11 @@
         );
 
     // setTimeout(()=> {
+
+    //  b'\x1b[1@E\x1b[1@e\x1b[1@Q\x1b[1@A\x1b[1@A\x1b[1@A\x1b[1@a\x1b[1@2\x1b[1@v\x1b[1@0\x1b[1@r\x1b[1@M\x1b[1@5\x1b[1@6\x1b[1@7\x1b[1@U' 
+    // b"\x1b[C\x1b[1@'\x08"
+
+
     //
     //     terminal.echo('Last login: Mon Feb 24 12:10:27 2020 from 127.0.0.1\r\r\n'
     //     );terminal.echo('\x1b[1m\x1b[7m%\x1b[m\x1b[1m\x1b[0m                                                                                             \r \r'
