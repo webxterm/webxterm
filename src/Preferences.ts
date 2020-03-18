@@ -186,6 +186,15 @@ export class Preferences {
     // 一个制表符填充多少个字符
     private _tabSize: number = 0;
 
+    // 是否启用心跳机制
+    private _enableHeartbeat: boolean = false;
+
+    // 离下一次心跳的秒数
+    private _nextHeartbeatSeconds: number = 0;
+
+    // 是否含有滚动条
+    private _scrollbar: boolean = false;
+
     readonly instanceId: string;
 
     private terminal: Terminal;
@@ -236,10 +245,17 @@ export class Preferences {
         // saveLines (class SaveLines)
         //                Specifies the number of lines to save beyond the top of the
         //                screen when a scrollbar is turned on.  The default is "1024".
-        this.scrollBack = 1024;
+        this.scrollBack = 51200;
 
         // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
-        this._tabSize = 8;  // 默认是8
+        this.tabSize = 8;  // 默认是8
+
+        // 默认启用心跳机制
+        this.enableHeartbeat = true;
+        // 离下一次心跳的秒数(s)
+        this.nextHeartbeatSeconds = 10;
+        // 默认含有滚动条
+        this.scrollbar = true;
     }
 
     getFonts(): Font[] {
@@ -801,6 +817,15 @@ export class Preferences {
 
     set scrollBack(value: number) {
         this._scrollBack = value;
+
+        if(value > 51200){
+            throw new Error("最大行数不能超过51200！");
+        }
+
+        // 设置最大滚动行数
+        if(this.terminal.bufferSet && this.terminal.bufferSet.normal){
+            this.terminal.bufferSet.normal.maxScrollBack = value;
+        }
     }
 
 
@@ -810,5 +835,45 @@ export class Preferences {
 
     set tabSize(value: number) {
         this._tabSize = value;
+    }
+
+
+    get enableHeartbeat(): boolean {
+        return this._enableHeartbeat;
+    }
+
+    set enableHeartbeat(value: boolean) {
+        this._enableHeartbeat = value;
+
+        if(this.terminal.transceiver){
+            this.terminal.transceiver.enableHeartbeat = value;
+        }
+    }
+
+    get nextHeartbeatSeconds(): number {
+        return this._nextHeartbeatSeconds;
+    }
+
+    set nextHeartbeatSeconds(value: number) {
+        this._nextHeartbeatSeconds = value;
+
+        if(this.terminal.transceiver){
+            this.terminal.transceiver.nextHeartbeatSeconds = value;
+        }
+    }
+
+    set scrollbar(value: boolean) {
+        this._scrollbar = value;
+
+        if(!this._scrollbar){
+            // 不要滚动条
+            Styles.add(".container", {
+                "overflow-y": "hidden"
+            }, this.terminal.instanceId)
+        } else {
+            Styles.add(".container", {
+                "overflow-y": "scroll"
+            }, this.terminal.instanceId)
+        }
     }
 }

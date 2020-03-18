@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebXterm示例</title>
+    <link rel="stylesheet" href="../css/terminal.css?version=1.3">
+    <script type="text/javascript" src="../dist/webxterm.js"></script>
+    <script type="text/javascript" src="./demo.js?version=1.1"></script>
+
+    <style>
+        #demo > div:not(.script){
+            width: 700px;
+            height: 500px;
+            background-color: #000;
+            margin: 0 auto;
+        }
+
+        #demo > div.script{
+            margin: 20px auto 10px;
+            width: 700px;
+            padding: 10px 0;
+            color: #fff;
+            background-color: #333333;
+        }
+
+        #demo{
+            height: 100vh;
+            overflow: auto;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="demo">
+
+        <div class="script">
+            <code>
+                <pre>
+    执行top命令:
+    &lt;link rel="stylesheet" href="../css/terminal.css"&gt;
+    &lt;script type="text/javascript" src="../dist/webxterm.js"&gt;&lt;/script&gt;
+    &lt;script type="text/javascript"&gt;
+
+        new webxterm.Terminal({
+            instance: document.getElementById("demo-top"),
+            // wsServer: "wss://baikai.top/webxterm",
+        })
+        // .open('127.0.0.1', 'root', '123456', 22)
+        .write(demoJSON.top.join(""));
+
+    &lt;/script&gt;
+                </pre>
+            </code>
+        </div>
+        <div id="demo-top"></div>
+
+        <div class="script">
+            <code>
+                <pre>
+    执行setup命令:
+    &lt;link rel="stylesheet" href="../css/terminal.css"&gt;
+    &lt;script type="text/javascript" src="../dist/webxterm.js"&gt;&lt;/script&gt;
+    &lt;script type="text/javascript"&gt;
+
+        new webxterm.Terminal({
+            instance: document.getElementById("demo-setup"),
+        }).write(demoJSON.setup.join(""));
+
+    &lt;/script&gt;
+                </pre>
+            </code>
+        </div>
+        <div id="demo-setup"></div>
+
+        <div class="script">
+            <code>
+                <pre>
+    执行vi命令:
+    &lt;link rel="stylesheet" href="../css/terminal.css"&gt;
+    &lt;script type="text/javascript" src="../dist/webxterm.js"&gt;&lt;/script&gt;
+    &lt;script type="text/javascript"&gt;
+
+        new webxterm.Terminal({
+            instance: document.getElementById("demo-vi"),
+        }).write(demoJSON.vi.join(""));
+
+    &lt;/script&gt;
+                </pre>
+            </code>
+        </div>
+        <div id="demo-vi"></div>
+
+        <div class="script">
+            <code>
+                <pre>
+    执行ls命令:
+    &lt;link rel="stylesheet" href="../css/terminal.css"&gt;
+    &lt;script type="text/javascript" src="../dist/webxterm.js"&gt;&lt;/script&gt;
+    &lt;script type="text/javascript"&gt;
+
+        new webxterm.Terminal({
+            instance: document.getElementById("demo-ll"),
+        }).write(demoJSON.ll.join(""));
+
+    &lt;/script&gt;
+                </pre>
+            </code>
+        </div>
+        <div id="demo-ll"></div>
+
+        <div style="text-align: center; background-color: transparent; height: 100px; padding-top: 20px;">
+            &copy; WebXterm.com
+        </div>
+
+    </div>
+
+    <script type="text/javascript">
+
+        const xterm1 = new webxterm.Terminal({
+            instance: document.getElementById("demo-top"),
+            // wsServer: "wss://a.baikai.top:444/webxterm",
+        });
+            // .open('182.61.55.239', 'root', 'baikai#1234', 2025)
+        xterm1.write(demoJSON.top.join(""));
+
+        const xterm2 = new webxterm.Terminal({
+            instance: document.getElementById("demo-setup"),
+        });
+        xterm2.write(demoJSON.setup.join(""));
+
+
+        const xterm3 = new webxterm.Terminal({
+            instance: document.getElementById("demo-vi"),
+        });
+        xterm3.write(demoJSON.vi.join(""));
+        xterm3.preferences.colorScheme = "Black on light yellow";
+
+        const xterm4 = new webxterm.Terminal({
+            instance: document.getElementById("demo-ll"),
+        });
+        xterm4.write(demoJSON.ll.join(""));
+        xterm4.preferences.colorScheme = "Green on black";
+
+
+
+    </script>
+
+</body>
+</html>

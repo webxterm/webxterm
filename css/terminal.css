@@ -166,7 +166,8 @@ html, body {
     margin: 0;
     padding: 0;
     width: 100%;
-    background-color: transparent;
+    /*background-color: transparent;*/
+    background-color: red;
     color: transparent;
     z-index: 2;
     height: 0;

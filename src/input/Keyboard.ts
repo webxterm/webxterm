@@ -322,7 +322,7 @@ export class Keyboard {
         //
         keySym = this.keyMap[key];
 
-        console.info("keySym:" + keySym);
+        // console.info("keySym:" + keySym);
 
         if (modifiers > 0) {
 

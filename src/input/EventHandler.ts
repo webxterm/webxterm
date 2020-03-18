@@ -72,7 +72,7 @@ export class EventHandler {
 
         // 注册容器点击事件
         container.addEventListener("click", (e: Event) => {
-            console.info(e);
+            // console.info(e);
             this.quickSelectAll = false;
             if (this.getSelection().length === 0) {
                 clipboard.focus(defaultOption);
@@ -80,7 +80,7 @@ export class EventHandler {
         });
 
         container.addEventListener("paste", (e: ClipboardEvent) => {
-            console.info(e);
+            // console.info(e);
             clipboard.focus();
             if(e.clipboardData){
                 this.paste(e.clipboardData.getData('text'), 'clipboard2', terminal);
@@ -94,7 +94,7 @@ export class EventHandler {
             switch (e.button) {
                 case 0:
                     // 左键按下
-                    console.info('左键按下');
+                    // console.info('左键按下');
                     focusTarget = FocusTarget.CONTAINER;
 
                     // 终端获取焦点
@@ -145,8 +145,20 @@ export class EventHandler {
                             console.info('光标落在某一行中....');
                             y = target.offsetTop;
                         } else {
-                            // 光标落在其他地方的话，不处理。。。
-                            break;
+                            // 如果落在.viewport-row的某一个span中。
+                            if(target.nodeName && target.nodeName.toUpperCase() == "SPAN"){
+                                // span
+                                if(target.parentElement
+                                    && CommonUtils.hasClass(target.parentElement, 'viewport-row')){
+                                    console.info('光标落在某一行中....');
+                                    y = target.offsetTop;
+                                } else {
+                                    break;
+                                }
+                            } else {
+                                // 光标落在其他地方的话，不处理。。。
+                                break;
+                            }
                         }
 
                         Styles.add(".clipboard", {
@@ -157,17 +169,17 @@ export class EventHandler {
                             width: (target.getBoundingClientRect().width - x) + "px"
                         }, terminal.instanceId);
 
-                        setTimeout(() => {
-
-                            Styles.add(".clipboard", {
-                                position: "",
-                                left: "",
-                                top: "",
-                                height: "",
-                                width: ""
-                            }, terminal.instanceId);
-
-                        }, 100);
+                        // setTimeout(() => {
+                        //
+                        //     Styles.add(".clipboard", {
+                        //         position: "",
+                        //         left: "",
+                        //         top: "",
+                        //         height: "",
+                        //         width: ""
+                        //     }, terminal.instanceId);
+                        //
+                        // }, 100);
                     }
                     break;
                 case 3:
@@ -202,7 +214,7 @@ export class EventHandler {
         // });
 
         document.addEventListener("keydown", (e: KeyboardEvent) => {
-            console.info(e);
+            // console.info(e);
             // 修饰键不处理。
             if(e.key === "Alt"
                 || e.key === "Control"
@@ -235,7 +247,7 @@ export class EventHandler {
 
         clipboard.addEventListener('keydown', (e:KeyboardEvent) => {
 
-            console.info(e);
+            // console.info(e);
             this.quickSelectAll = false;
 
             // 不用取消默认行为。
@@ -274,7 +286,9 @@ export class EventHandler {
                 //
                 // return key;
                 const key = e.key;
-
+                if(key == "Process"){
+                    return;
+                }
 
                 if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(key)) {
                     // 中文正常处理。。
@@ -317,7 +331,7 @@ export class EventHandler {
                             break;
                     }
 
-                    console.info(JSON.stringify(this.composing));
+                    // console.info(JSON.stringify(this.composing));
 
                     return;
                 }
@@ -359,7 +373,7 @@ export class EventHandler {
             this.paste(keySym, "key", terminal);
 
             // 如果还没有满屏的话，不用滚动了
-            if(terminal.bufferSet.activeBuffer.currentLineNum > terminal.rows
+            if(terminal.bufferSet.activeBuffer.currentLineNum >= terminal.rows
                 && !terminal.enableScrollToBottom){
                 terminal.enableScrollToBottom = true;
             }
@@ -536,12 +550,12 @@ export class EventHandler {
 
 
         /* js 监听ios手机键盘弹起和收起的事件 */
-        document.body.addEventListener('focusin', () => {  //软键盘弹起事件
-            console.log("键盘弹起, container.offsetTop:", clipboard.offsetTop, clipboard.scrollTop, clipboard.getBoundingClientRect());
-        });
-        document.body.addEventListener('focusout', () => { //软键盘关闭事件
-            console.log("键盘收起, container.offsetTop:", clipboard.offsetTop, clipboard.scrollTop, clipboard.getBoundingClientRect());
-        });
+        // document.body.addEventListener('focusin', () => {  //软键盘弹起事件
+        //     console.log("键盘弹起, container.offsetTop:", clipboard.offsetTop, clipboard.scrollTop, clipboard.getBoundingClientRect());
+        // });
+        // document.body.addEventListener('focusout', () => { //软键盘关闭事件
+        //     console.log("键盘收起, container.offsetTop:", clipboard.offsetTop, clipboard.scrollTop, clipboard.getBoundingClientRect());
+        // });
 
 
     }

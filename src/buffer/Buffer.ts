@@ -49,9 +49,11 @@ export class Buffer {
 
     // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-The-Alternate-Screen-Buffer
     // 是否可以滚动
-    private readonly scrollBack: boolean = false;
+    readonly scrollBack: boolean = false;
     // 保存的行
     private _savedLines: BufferLine[] = [];
+    // 最大滚动行数
+    private _maxScrollBack: number = 1024;
 
     constructor(rows: number, columns: number, scrollBack: boolean, type: string = "") {
         this._rows = rows;
@@ -104,6 +106,14 @@ export class Buffer {
 
     set savedY(value: number) {
         this._savedY = value;
+    }
+
+    get maxScrollBack(): number {
+        return this._maxScrollBack;
+    }
+
+    set maxScrollBack(value: number) {
+        this._maxScrollBack = value;
     }
 
     get lines(): BufferLine[] {
@@ -218,7 +228,7 @@ export class Buffer {
             if (saveLines && this.scrollBack) {
                 this._savedLines.push(lines[i]);
                 // 如果超过最大的scrollBack的话，就删除第一行
-                if(this._savedLines.length > 1024){
+                if(this._savedLines.length > this._maxScrollBack){
                     this._savedLines.splice(0, 1)[0].element.remove();
                 }
             } else {

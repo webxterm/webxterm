@@ -410,8 +410,11 @@ export class EscapeSequenceParser {
             this.parser.x -= ps;
         } else {
             for (let i = 0; i < ps; i++) {
+                // MySQL粘贴：EeQAAAa2v0rM567U，返回以下数据
+                // b'\x1b[1@E\x1b[1@e\x1b[1@Q\x1b[1@A\x1b[1@A\x1b[1@A\x1b[1@a\x1b[1@2\x1b[1@v\x1b[1@0\x1b[1@r\x1b[1@M\x1b[1@5\x1b[1@6\x1b[1@7\x1b[1@U' 
+                // 接着添加一个单引号
+                // b"\x1b[C\x1b[1@'\x08"
                 this.activeBufferLine.insert(this.parser.x, DataBlock.newBlock(" ", this.attribute));
-                this.parser.x++;
             }
         }
 

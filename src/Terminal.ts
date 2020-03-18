@@ -34,7 +34,7 @@ export class Terminal {
     private enable: boolean = true;
 
     // 是否可以滚动到底部
-    private _enableScrollToBottom: boolean = false;
+    private _enableScrollToBottom: boolean = true;
 
     // 是否已经初始化
     init: boolean = false;
@@ -71,6 +71,8 @@ export class Terminal {
 
     // Websocket服务器
     readonly wsServer: string;
+    // 问候语
+    readonly greetings: string;
 
     // 解析器
     readonly parser: Parser;
@@ -103,12 +105,18 @@ export class Terminal {
         this.onRender = args["render"];
         this.wsServer = args["wsServer"];
 
+        this.greetings = args['greetings'] || "Welcome to WebXterm, a web Terminal Emulator.\r\n\r\n";
+
         // 光标
         this.cursor = new Cursor(this.instanceId);
 
         // 偏好设置
         this.preferences = new Preferences(this);
         this.preferences.init();
+
+        if(!!args['scrollBack']){
+            this.preferences.scrollBack = args['scrollBack'];
+        }
 
         this.cursor.blinking = this.preferences.cursorBlinking;
         this.cursor.enable = true;
@@ -195,10 +203,11 @@ export class Terminal {
         [this.charWidth, this.charHeight] = this.preferences.defaultFontSizeVal;
 
         // 渲染完成
-        this.onRender({
-            'type': 'render',
-            'instance': this
-        });
+        if(this.onRender)
+            this.onRender({
+                'type': 'render',
+                'instance': this
+            });
 
         this.init = true;
 
@@ -251,7 +260,6 @@ export class Terminal {
      * @param data
      */
     pushMessage(data: string){
-        console.info("pushMessage:", data);
         this.messageQueue.push(data);
         this.startPrinter();
     }
@@ -277,17 +285,21 @@ export class Terminal {
         this.addBufferFillRows();
         // 第一行设置为已被使用。
         this.bufferSet.activeBufferLine.used = true;
+        // 设置最大滚动行数
+        this.bufferSet.normal.maxScrollBack = this.preferences.scrollBack;
 
         // 终端已就绪
         this.isReady = true;
 
-        this.echo("Welcome to WebXterm, a web Terminal Emulator.\r\n\r\n");
+        if(!!this.greetings)
+            this.echo(this.greetings);
 
         if(this.messageQueue.length > 0){
             this.startPrinter();
         }
 
-        this.connectServer();
+        if(!!this.wsServer)
+            this.connectServer();
 
     }
 
@@ -440,6 +452,11 @@ export class Terminal {
     private connectServer(){
 
         this._transceiver = new Transceiver(this.wsServer, this);
+        if (this._transceiver) {
+            this._transceiver.enableHeartbeat = this.preferences.enableHeartbeat;
+            this._transceiver.nextHeartbeatSeconds = this.preferences.nextHeartbeatSeconds;
+        }
+
         this._transceiver.open().then((e: any) => {
             console.info(e);
             // 连接成功
@@ -485,7 +502,9 @@ export class Terminal {
      * 将数据写入终端，这个方法会等待终端就绪。
      */
     write(text: string){
-        this.messageQueue.push(text);
+        if(!!text)
+            this.messageQueue.push(text);
+        return this;
     }
 
     /**
@@ -512,7 +531,6 @@ export class Terminal {
                 this.messageQueueTimer = 0;
             } else {
                 const chunk = this.messageQueue.splice(0, len);
-                console.info("chunk:", chunk);
                 this.echo(chunk.join(""));
             }
 

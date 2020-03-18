@@ -10,14 +10,24 @@ export class Transceiver {
 
     readonly terminal: Terminal;
 
+    // 保持连接
+    private keepAlive: boolean = false;
+
+    // 心跳定时器
+    private heartbeatId: number = 0;
+
+    // 是否启用心跳机制
+    enableHeartbeat: boolean = false;
+
+    // 离下一次心跳还有多少秒
+    nextHeartbeatSeconds: number = 0;
+
     // 连接成功
     private connected: boolean = false;
 
     constructor(wsServer: string, terminal: Terminal) {
         if (!!wsServer)
             this.wsServer = wsServer;
-
-
         this.terminal = terminal;
     }
 
@@ -42,7 +52,12 @@ export class Transceiver {
             };
             this._socket.onmessage = (e) => {
                 const message: string = e.data;
-                console.info("message:", message);
+
+                if(this.enableHeartbeat){
+                    // 停止心跳
+                    this.stopHeartbeat();
+                }
+
                 if (!this._version) {
                     // 有可能数据和下一个chunk合并返回的情况
                     const endIndex = message.indexOf("}") + 1;
@@ -53,6 +68,11 @@ export class Transceiver {
                 } else {
                     this.terminal.pushMessage(message);
                 }
+
+                if(this.enableHeartbeat){
+                    // 启动心跳
+                    this.startHeartbeat();
+                }
             };
         });
     }
@@ -62,7 +82,6 @@ export class Transceiver {
      * @param data
      */
     public send(data: string): void {
-        console.info("send.data>>>" + data);
         if (this._socket) {
             this._socket.send(data)
         }
@@ -88,4 +107,33 @@ export class Transceiver {
 
     }
 
+    /**
+     * 停止心跳
+     */
+    private stopHeartbeat() {
+
+        if(this.heartbeatId){
+            clearInterval(this.heartbeatId);
+            this.heartbeatId = 0;
+        }
+
+    }
+
+    /**
+     * 开始心跳
+     */
+    private startHeartbeat(){
+
+        this.heartbeatId = setInterval(() => {
+
+            if(this._socket){
+                // PM Pt ST
+                // PM => ESC ^
+                // ST => ESC \
+                this.send("\x1b^hello!\x1b\\");
+            }
+
+        }, this.nextHeartbeatSeconds * 1000);
+
+    }
 }
