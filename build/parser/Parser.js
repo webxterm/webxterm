@@ -108,7 +108,9 @@ class Parser {
         this._gCharset = 0;
         this._applicationKeypad = false;
         this._normalKeypad = true;
+        this.promptSize = 0;
         this.terminal = terminal;
+        this.promptSize = terminal.prompt.length;
     }
     get x() {
         return this.activeBuffer.x;
@@ -198,7 +200,7 @@ class Parser {
                             this.terminal.bell();
                             break;
                         case C0.BS:
-                            if (this.x > 1) {
+                            if (this.x > (this.promptSize + 1)) {
                                 this.x--;
                             }
                             else {

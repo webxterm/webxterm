@@ -94,7 +94,8 @@ export class Terminal {
     readonly preferences: Preferences;
     // 连接的服务器信息
     readonly sshServerInfo: SSHServerInfo;
-
+    // 终端提示符
+    readonly prompt: string = "";
 
     constructor(args: { [key: string]: any }) {
         // const now = new Date();
@@ -103,9 +104,15 @@ export class Terminal {
 
         this.instance = args["instance"];
         this.onRender = args["render"];
-        this.wsServer = args["wsServer"];
+        this.wsServer = args["wsServer"] || "";
+
+        if(this.wsServer.length == 0){
+            this.prompt = "WebXterm>>> ";
+            this.write(this.prompt);
+        }
 
         this.greetings = args['greetings'] || "Welcome to WebXterm, a web Terminal Emulator.\r\n\r\n";
+
 
         // 光标
         this.cursor = new Cursor(this.instanceId);
@@ -494,8 +501,14 @@ export class Terminal {
      * 打印文本
      * @param text
      */
-    private echo(text: string) {
-        this.parser.parse(text);
+    echo(text: string) {
+        if(!this.isReady){
+            setTimeout(() => {
+                this.parser.parse(text);
+            }, 1000);
+        } else {
+            this.parser.parse(text);
+        }
     }
 
     /**

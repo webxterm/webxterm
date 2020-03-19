@@ -145,8 +145,12 @@ export class Parser {
     private _applicationKeypad: boolean = false;
     private _normalKeypad: boolean = true;
 
+    // 提示符的长度
+    readonly promptSize: number = 0;
+
     constructor(terminal: Terminal) {
         this.terminal = terminal;
+        this.promptSize = terminal.prompt.length;
     }
 
     get x(){
@@ -261,6 +265,10 @@ export class Parser {
 
     /**
      * 解析数据
+     * rz: 命令返回如下
+     * b'rz waiting to receive.**\x18B0100000023be50\r\x8a\x11'
+     * b'**\x18B0100000023be50\r\x8a\x11'
+     *
      * @param text
      */
     parse(text: string) {
@@ -291,13 +299,8 @@ export class Parser {
                             break;
                         case C0.BS:
                             // Backspace (BS  is Ctrl-H).
-                            if(this.x > 1){
+                            if(this.x > (this.promptSize + 1)){
                                 this.x--;
-                                // 重置为非空
-                                // 如果前一个是中文的话。
-                                // const dataBlock = this.activeBufferLine.get(this.x);
-                                // dataBlock.empty = false;
-                                // dataBlock.attribute.len2 = false;
                             } else {
                                 this.terminal.bell();
                             }

@@ -230,6 +230,7 @@ export class EventHandler {
 
             this.paste(keySym, "key", terminal);
 
+
             clipboard.focus();
         });
 
@@ -449,6 +450,8 @@ export class EventHandler {
 
                     compositionElement.innerHTML = this.composing.end;
 
+                    terminal.showCursor();
+
                     // 发送内容给后台
                     this.paste(e.data, "composition", terminal);
 
@@ -457,7 +460,7 @@ export class EventHandler {
 
                     compositionElement.remove();
 
-                    terminal.showCursor();
+
                 }
             }
         });
@@ -580,6 +583,29 @@ export class EventHandler {
             terminal.transceiver.send(JSON.stringify({
                 "cmd": data
             }));
+        } else if(!terminal.transceiver || !terminal.transceiver.connected){
+            // 没有连接到终端。
+            console.info("clipboard.keySym:" + data);
+
+            switch (data) {
+                case "\x0d":
+                    terminal.echo( "\r\n" + terminal.prompt);
+                    break;
+                case "\x7f":
+                    if(terminal.bufferSet.activeBuffer.x >= terminal.prompt.length){
+                        terminal.echo("\x08\x1b[P");
+                    } else {
+                        terminal.echo("\x07");
+                    }
+                    break;
+                case "\x1b[A":
+                case "\x1b[B":
+                    terminal.echo("\x07");
+                    break;
+                default:
+                    terminal.echo(data);
+            }
+
         }
     }
 }

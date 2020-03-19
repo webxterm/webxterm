@@ -23,7 +23,7 @@ export class Transceiver {
     nextHeartbeatSeconds: number = 0;
 
     // 连接成功
-    private connected: boolean = false;
+    private _connected: boolean = false;
 
     constructor(wsServer: string, terminal: Terminal) {
         if (!!wsServer)
@@ -41,13 +41,15 @@ export class Transceiver {
             this._socket = new WebSocket(this.wsServer);
             this._socket.onopen = (e) => {
                 // 连接成功
-                this.connected = true;
+                this._connected = true;
                 resolve(e);
             };
             this._socket.onclose = (e) => {
+                this._connected = false;
                 reject(e);
             };
             this._socket.onerror = (e) => {
+                this._connected = false;
                 reject(e);
             };
             this._socket.onmessage = (e) => {
@@ -135,5 +137,10 @@ export class Transceiver {
 
         }, this.nextHeartbeatSeconds * 1000);
 
+    }
+
+
+    get connected(): boolean {
+        return this._connected;
     }
 }
