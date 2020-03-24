@@ -79,7 +79,7 @@
         // wsServer: "wss://a.baikai.top:444/webxterm",
         // wsServer: "ws://a.baikai.top:8899",
         // wsServer: "ws://192.168.0.100:8899",
-        // wsServer: "ws://127.0.0.1:8899",
+        wsServer: "ws://127.0.0.1:8899",
         render: (args) => {
             console.info(args.instance);
         }
@@ -92,16 +92,16 @@
             console.info("updateTitle:" + title);
         }
     })
-        // .open(
-        //     // '192.168.0.106',
-        //     // 'baikai',
-        //     // 'x+y-1=0?x&y',
-        //     // 22
-        //     // '103.106.245.117', 'root', '2730e5499c', 2025
-        //     // '192.168.46.133', 'baikai', 'baikai#1234', 22
-        //     '182.61.55.239', 'root', 'baikai#1234', 2025
-        //     // '192.168.0.100', 'fei00', '0000', 22
-        // );
+        .open(
+            '192.168.0.109',
+            'baikai',
+            'x+y-1=0?x&y',
+            22
+            // '103.106.245.117', 'root', '2730e5499c', 2025
+            // '192.168.46.133', 'baikai', 'baikai#1234', 22
+            // '182.61.55.239', 'root', 'baikai#1234', 2025
+            // '192.168.0.100', 'fei00', '0000', 22
+        );
 
 
     function download() {

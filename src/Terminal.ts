@@ -95,7 +95,7 @@ export class Terminal {
     // 连接的服务器信息
     readonly sshServerInfo: SSHServerInfo;
     // 终端提示符
-    readonly prompt: string = "";
+    readonly prompt: string = "WebXterm>>> ";
 
     constructor(args: { [key: string]: any }) {
         // const now = new Date();
@@ -105,9 +105,9 @@ export class Terminal {
         this.instance = args["instance"];
         this.onRender = args["render"];
         this.wsServer = args["wsServer"] || "";
+        this.prompt = args["prompt"] || "";
 
         if(this.wsServer.length == 0){
-            this.prompt = "WebXterm>>> ";
             this.write(this.prompt);
         }
 

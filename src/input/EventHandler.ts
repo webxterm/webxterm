@@ -129,20 +129,20 @@ export class EventHandler {
                         // => 光标落在某一行中
 
                         let target: HTMLElement = <HTMLElement> e.target
-                            , x = e.pageX
+                            , x = e.pageX - terminal.container.getBoundingClientRect().left
                             , y = 0
                             , h = terminal.charHeight;
 
                         if (target === terminal.container) {
-                            console.info('光标落在容器中....');
+                            // console.info('光标落在容器中....');
                             y = e.pageY - (e.pageY % terminal.charHeight);
                         } else if (target === terminal.presentation) {
                             // 相当于光标落在最后一行数据行中。
                             y = target.offsetTop;
                             h = target.getBoundingClientRect().height;
-                            console.info('光标落在撰写栏中....');
+                            // console.info('光标落在撰写栏中....');
                         } else if (CommonUtils.hasClass(target, 'viewport-row')) {
-                            console.info('光标落在某一行中....');
+                            // console.info('光标落在某一行中....');
                             y = target.offsetTop;
                         } else {
                             // 如果落在.viewport-row的某一个span中。
@@ -150,7 +150,7 @@ export class EventHandler {
                                 // span
                                 if(target.parentElement
                                     && CommonUtils.hasClass(target.parentElement, 'viewport-row')){
-                                    console.info('光标落在某一行中....');
+                                    // console.info('光标落在某一行中....');
                                     y = target.offsetTop;
                                 } else {
                                     break;

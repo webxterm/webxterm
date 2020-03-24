@@ -119,6 +119,7 @@
 
         const xterm1 = new webxterm.Terminal({
             instance: document.getElementById("demo-top"),
+            prompt: '',
             // wsServer: "wss://a.baikai.top:444/webxterm",
         });
             // .open('182.61.55.239', 'root', 'baikai#1234', 2025)
@@ -126,21 +127,25 @@
 
         const xterm2 = new webxterm.Terminal({
             instance: document.getElementById("demo-setup"),
+            prompt: '',
         });
         xterm2.write(demoJSON.setup.join(""));
 
 
         const xterm3 = new webxterm.Terminal({
             instance: document.getElementById("demo-vi"),
+            prompt: '',
         });
         xterm3.write(demoJSON.vi.join(""));
         xterm3.preferences.colorScheme = "Black on light yellow";
 
         const xterm4 = new webxterm.Terminal({
             instance: document.getElementById("demo-ll"),
+            prompt: '',
         });
         xterm4.write(demoJSON.ll.join(""));
         xterm4.preferences.colorScheme = "Green on black";
+
 
 
 
