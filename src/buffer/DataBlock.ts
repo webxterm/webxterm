@@ -94,6 +94,8 @@ export class DataBlock {
             this.attribute.len2 = false;
 
             if(!dirty) dirty = true;
+        } else {
+            this._version++;
         }
 
         return dirty;

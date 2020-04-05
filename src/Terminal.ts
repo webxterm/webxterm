@@ -41,12 +41,10 @@ export class Terminal {
     // 是否已经就绪
     isReady: boolean = false;
 
-    // 消息队列定时器
+    // // 消息队列定时器
     private messageQueueTimer: number = 0;
-
-    private messageQueue: string[] = [];
-
-    private _transceiver: Transceiver | undefined;
+    //
+    readonly messageQueue: string[] = [];
 
 
     // 终端实例
@@ -96,6 +94,10 @@ export class Terminal {
     readonly sshServerInfo: SSHServerInfo;
     // 终端提示符
     readonly prompt: string = "WebXterm>>> ";
+    // 发送接收器
+    readonly transceiver: Transceiver;
+    // Worker
+    // readonly sshWorker: Worker;
 
     constructor(args: { [key: string]: any }) {
         // const now = new Date();
@@ -107,7 +109,7 @@ export class Terminal {
         this.wsServer = args["wsServer"] || "";
         this.prompt = args["prompt"] || "";
 
-        if(this.wsServer.length == 0){
+        if (this.wsServer.length == 0) {
             this.write(this.prompt);
         }
 
@@ -121,7 +123,7 @@ export class Terminal {
         this.preferences = new Preferences(this);
         this.preferences.init();
 
-        if(!!args['scrollBack']){
+        if (!!args['scrollBack']) {
             this.preferences.scrollBack = args['scrollBack'];
         }
 
@@ -150,6 +152,19 @@ export class Terminal {
 
         // 需要连接的服务器信息
         this.sshServerInfo = new SSHServerInfo();
+
+        // this.sshWorker = new Worker("../src/worker/worker1.js");
+        // this.sshWorker.postMessage({
+        //     "type": "socket",
+        //     "url": this.wsServer,
+        //     "enableHeartbeat": this.preferences.enableHeartbeat,
+        //     "nextHeartbeatSeconds": this.preferences.nextHeartbeatSeconds
+        // });
+
+        // 初始化发送接收器
+        this.transceiver = new Transceiver(this.wsServer, this);
+        this.transceiver.enableHeartbeat = this.preferences.enableHeartbeat;
+        this.transceiver.nextHeartbeatSeconds = this.preferences.nextHeartbeatSeconds;
 
     }
 
@@ -210,7 +225,7 @@ export class Terminal {
         [this.charWidth, this.charHeight] = this.preferences.defaultFontSizeVal;
 
         // 渲染完成
-        if(this.onRender)
+        if (this.onRender)
             this.onRender({
                 'type': 'render',
                 'instance': this
@@ -298,14 +313,15 @@ export class Terminal {
         // 终端已就绪
         this.isReady = true;
 
-        if(!!this.greetings)
+        if (!!this.greetings)
             this.echo(this.greetings);
 
-        if(this.messageQueue.length > 0){
-            this.startPrinter();
+        if (this.messageQueue.length > 0) {
+            // this.startPrinter();
+            this.echo(this.messageQueue.splice(0, this.messageQueue.length).join(""))
         }
 
-        if(!!this.wsServer)
+        if (!!this.wsServer)
             this.connectServer();
 
     }
@@ -326,7 +342,7 @@ export class Terminal {
 
         // 更新缓冲区
         let fragment = this.parser.bufferSet.resize(this.rows, this.columns);
-        if(fragment) this.viewport.appendChild(fragment);
+        if (fragment) this.viewport.appendChild(fragment);
 
         this.resizeRemote();
 
@@ -338,10 +354,10 @@ export class Terminal {
     /**
      * 重置终端大小
      */
-    resizeRemote(){
+    resizeRemote() {
 
         // 设置宽度
-        if(this.transceiver){
+        if (this.transceiver) {
 
             this.transceiver.send(JSON.stringify({
                 size: {
@@ -367,12 +383,6 @@ export class Terminal {
         const width = this.measureDiv.getBoundingClientRect().width;
         this._columns = Math.floor(width / value);
 
-        // let paddingRight = rowRect.width - this._columns * value;
-
-        // Styles.add(".viewport", {
-        //     "padding-right": paddingRight + "px"
-        // }, this.instanceId);
-
         Styles.add(".len2", {
             "width": value * 2 + "px"
         }, this.instanceId);
@@ -387,10 +397,6 @@ export class Terminal {
 
     get rows(): number {
         return this._rows;
-    }
-
-    get transceiver(): Transceiver | undefined {
-        return this._transceiver;
     }
 
     /**
@@ -438,10 +444,10 @@ export class Terminal {
      * @param pkey
      */
     open(hostname: string,
-                username: string,
-                password: string,
-                port: number = 22,
-                pkey: string = ""): Terminal {
+         username: string,
+         password: string,
+         port: number = 22,
+         pkey: string = ""): Terminal {
 
         // 加入等待初始化完成？
         this.sshServerInfo.hostname = hostname;
@@ -456,34 +462,59 @@ export class Terminal {
     /**
      * 连接SSH服务器
      */
-    private connectServer(){
+    private connectServer() {
 
-        this._transceiver = new Transceiver(this.wsServer, this);
-        if (this._transceiver) {
-            this._transceiver.enableHeartbeat = this.preferences.enableHeartbeat;
-            this._transceiver.nextHeartbeatSeconds = this.preferences.nextHeartbeatSeconds;
-        }
 
-        this._transceiver.open().then((e: any) => {
+        // this.sshWorker.postMessage({
+        //     "type": "ssh",
+        //     "target": {
+        //         hostname: this.sshServerInfo.hostname,
+        //         username: this.sshServerInfo.username,
+        //         password: this.sshServerInfo.password,
+        //         port: this.sshServerInfo.port
+        //     },
+        //     "size": {
+        //         w: this.columns,
+        //         h: this.rows
+        //     },
+        //     "term": this.preferences.terminalType,
+        //     "sshType": '!sftp'
+        // });
+        //
+        // this.sshWorker.onmessage = (e) => {
+        //     let data = e.data;
+        //     switch (data["type"]) {
+        //         case "socket":
+        //             break;
+        //         case "get":
+        //             this.messageQueue.push(data["data"]);
+        //             this.startPrinter();
+        //             break;
+        //         case "sshVersion":
+        //             console.info("ssh version is " + data["data"]);
+        //             break;
+        //     }
+        //
+        // };
+
+        this.transceiver.open().then((e: any) => {
             console.info(e);
             // 连接成功
 
-            if(this._transceiver){
-                this._transceiver.send(JSON.stringify({
-                    target: {
-                        hostname: this.sshServerInfo.hostname,
-                        username: this.sshServerInfo.username,
-                        password: this.sshServerInfo.password,
-                        port: this.sshServerInfo.port
-                    },
-                    size: {
-                        w: this.columns,
-                        h: this.rows
-                    },
-                    term: this.preferences.terminalType,
-                    type: '!sftp'
-                }));
-            }
+            this.transceiver.send(JSON.stringify({
+                target: {
+                    hostname: this.sshServerInfo.hostname,
+                    username: this.sshServerInfo.username,
+                    password: this.sshServerInfo.password,
+                    port: this.sshServerInfo.port
+                },
+                size: {
+                    w: this.columns,
+                    h: this.rows
+                },
+                term: this.preferences.terminalType,
+                type: '!sftp'
+            }));
 
         }).catch((e) => {
 
@@ -502,7 +533,7 @@ export class Terminal {
      * @param text
      */
     echo(text: string) {
-        if(!this.isReady){
+        if (!this.isReady) {
             setTimeout(() => {
                 this.parser.parse(text);
             }, 1000);
@@ -514,8 +545,8 @@ export class Terminal {
     /**
      * 将数据写入终端，这个方法会等待终端就绪。
      */
-    write(text: string){
-        if(!!text)
+    write(text: string) {
+        if (!!text)
             this.messageQueue.push(text);
         return this;
     }
@@ -528,6 +559,8 @@ export class Terminal {
         if (this.messageQueueTimer) {
             return;
         }
+
+        // let waiting = false;
 
         this.messageQueueTimer = setInterval(() => {
 
@@ -543,8 +576,14 @@ export class Terminal {
                 clearInterval(this.messageQueueTimer);
                 this.messageQueueTimer = 0;
             } else {
+                // if(waiting){
+                //     console.info("waiting...", len);
+                //     return;
+                // }
+                // waiting = true;
                 const chunk = this.messageQueue.splice(0, len);
                 this.echo(chunk.join(""));
+                // waiting = false;
             }
 
         }, 0);
@@ -553,7 +592,7 @@ export class Terminal {
     /**
      * 虚拟响铃，通过修改背景颜色实现。
      */
-    bell(){
+    bell() {
         this.container.style.backgroundColor = this.preferences.visualBellColor;
         this.container.style.transition = "0.25s";
         setTimeout(() => {
@@ -602,8 +641,8 @@ export class Terminal {
      * 隐藏光标
      */
     hideCursor() {
-        console.info("hideCursor...");
-        this.cursor.show = false;
+        // console.info("hideCursor...");
+        // this.cursor.show = false;
     }
 
     /**
@@ -611,26 +650,27 @@ export class Terminal {
      */
     scrollToBottomOnInput() {
 
-        if(this.preferences.scrollToBottomOnInput && this._enableScrollToBottom){
+        if (this.preferences.scrollToBottomOnInput && this._enableScrollToBottom) {
             this.scrollToBottom();
         }
+
     }
 
     /**
      * 滚动到底部
      */
-    scrollToBottom(){
+    scrollToBottom() {
         this.container.scrollTop = this.container.scrollHeight;
     }
 
     /**
      * 将缓冲区的所有行添加到viewport
      */
-    addBufferFillRows(){
+    addBufferFillRows() {
 
         let fragment = document.createDocumentFragment();
         const lines = this.bufferSet.activeBuffer.lines;
-        for(let i = 0, len = lines.length; i < len; i++){
+        for (let i = 0, len = lines.length; i < len; i++) {
             fragment.appendChild(lines[i].element);
         }
         this.viewport.appendChild(fragment);
@@ -639,11 +679,11 @@ export class Terminal {
     /**
      * 注册重新连接事件
      */
-    registerConnect(){
+    registerConnect() {
         document.addEventListener('keydown', (e) => {
-            if(e.key === 'Enter'){
+            if (e.key === 'Enter') {
                 // 按了回车键
-                if(this.transceiver)
+                if (this.transceiver)
                     this.transceiver.send(JSON.stringify({cmd: '\x0d'}));
             }
             e.stopPropagation();

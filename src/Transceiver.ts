@@ -1,5 +1,8 @@
 import {Terminal} from "./Terminal";
 
+/**
+ * 发送接收器
+ */
 export class Transceiver {
 
     private readonly wsServer: string = "ws://127.0.0.1:88990";

@@ -242,12 +242,10 @@ export class Cursor {
     }
 
     set value(value: string) {
-        this._value = value;
         if (value.length == 0) {
             value = "&nbsp;";
         }
-        this.contentElement.innerHTML = value;
-
+        this._value = value;
     }
 
     set extraClass(value: string) {
@@ -274,6 +272,26 @@ export class Cursor {
         return null;
     }
 
+    getElement(){
+
+        this.version++;
+
+        if(!this.show){
+            let element = document.createElement("span");
+            element.id = this.id;
+            element.appendChild(document.createTextNode(this.value));
+            element.className = this._extraClass;
+            return element;
+        }
+
+        this.element.id = this.id;
+
+        this.contentElement.appendChild(document.createTextNode(this.value));
+        CommonUtils.addClass(this.element, this._extraClass);
+
+        return this.element;
+    }
+
     /**
      * 最终生成的html
      */
@@ -288,16 +306,17 @@ export class Cursor {
         this.version++;
 
         if(!this.show){
-            console.info("hide....");
-            let element = document.createElement("span");
-            element.id = this.id;
-            element.innerHTML = this.value;
-            element.className = this._extraClass;
-            return element.outerHTML;
+            // let element = document.createElement("span");
+            // element.id = this.id;
+            // element.innerHTML = this.value;
+            // element.className = this._extraClass;
+            // return element.outerHTML;
+            return `<span id="${this.id}" class="${this._extraClass}">${this.value}</span>`;
         }
 
         this.element.id = this.id;
 
+        this.contentElement.innerHTML = this.value;
         CommonUtils.addClass(this.element, this._extraClass);
 
         return this.element.outerHTML;

@@ -8,11 +8,41 @@
     <script type="text/javascript" src="./demo.js?version=1.1"></script>
 
     <style>
-        #demo > div:not(.script){
+        #demo > div.cont{
             width: 700px;
             height: 500px;
             background-color: #000;
             margin: 0 auto;
+        }
+
+        #demo > div.header{
+            width: 688px;
+            padding: 6px 0 3px 10px;
+            margin: 0 auto;
+            border: 1px solid #AAA;
+            border-bottom-width: 0;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
+        }
+
+        #demo > div.header > .dot{
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 12px;
+            margin-right: 4px;
+        }
+
+        #demo > div.header > .dot:nth-child(1){
+            background-color: #ed655a;
+        }
+
+        #demo > div.header > .dot:nth-child(2){
+            background-color: #e1c04d;
+        }
+
+        #demo > div.header > .dot:nth-child(3){
+            background-color: #71be46;
         }
 
         #demo > div.script{
@@ -34,26 +64,12 @@
 
     <div id="demo">
 
-        <div class="script">
-            <code>
-                <pre>
-    执行top命令:
-    &lt;link rel="stylesheet" href="../css/terminal.css"&gt;
-    &lt;script type="text/javascript" src="../dist/webxterm.js"&gt;&lt;/script&gt;
-    &lt;script type="text/javascript"&gt;
-
-        new webxterm.Terminal({
-            instance: document.getElementById("demo-top"),
-            // wsServer: "wss://baikai.top/webxterm",
-        })
-        // .open('127.0.0.1', 'root', '123456', 22)
-        .write(demoJSON.top.join(""));
-
-    &lt;/script&gt;
-                </pre>
-            </code>
+        <div class="header">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
         </div>
-        <div id="demo-top"></div>
+        <div class="cont" id="demo-top"></div>
 
         <div class="script">
             <code>
@@ -71,7 +87,12 @@
                 </pre>
             </code>
         </div>
-        <div id="demo-setup"></div>
+        <div class="header">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+        <div class="cont" id="demo-setup"></div>
 
         <div class="script">
             <code>
@@ -89,7 +110,12 @@
                 </pre>
             </code>
         </div>
-        <div id="demo-vi"></div>
+        <div class="header">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+        <div class="cont" id="demo-vi"></div>
 
         <div class="script">
             <code>
@@ -107,7 +133,12 @@
                 </pre>
             </code>
         </div>
-        <div id="demo-ll"></div>
+        <div class="header">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+        <div class="cont" id="demo-ll"></div>
 
         <div style="text-align: center; background-color: transparent; height: 100px; padding-top: 20px;">
             &copy; WebXterm.com

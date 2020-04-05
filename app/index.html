@@ -42,29 +42,11 @@
 </head>
 <body>
 
+    <div style="display: flex; ">
+        <div id="test" style="width: 100vw; height: 100vh;"></div>
+<!--        <div id="test2" style="width: 50vw; height: 100vh; background-color: red;"></div>-->
 
-<!--    <div style="display: flex; flex-direction: column">-->
-
-<!--        <div id="test" style="width: 100vw; height: calc(100vh - 40px);"></div>-->
-<!--        &lt;!&ndash;    <div style="height: 20vh"><a href="javascript:download();">下载日志文件</a></div>&ndash;&gt;-->
-
-
-<!--        <div id="keyboard"-->
-<!--             style="height: 40px;overflow-x: scroll; background-color: rgba(0,0,0,0.7); display: flex; align-items: center">-->
-<!--            <span class="key-item"><</span>-->
-<!--            <span class="key-item">ctrl</span>-->
-<!--            <span class="key-item">esc</span>-->
-<!--            <span class="key-item">-</span>-->
-<!--            <span class="key-item">/</span>-->
-<!--            <span class="key-item">alt</span>-->
-<!--            <span class="key-item">ins</span>-->
-<!--            <span class="key-item">del</span>-->
-<!--        </div>-->
-
-
-<!--    </div>-->
-
-    <div id="test" style="width: 100vw; height: 100vh;"></div>
+    </div>
 
 
 
@@ -93,15 +75,17 @@
         }
     })
         .open(
-            '192.168.0.109',
-            'baikai',
-            'x+y-1=0?x&y',
-            22
+            // '192.168.0.109',
+            // 'baikai',
+            // 'x+y-1=0?x&y',
+            // 22
             // '103.106.245.117', 'root', '2730e5499c', 2025
             // '192.168.46.133', 'baikai', 'baikai#1234', 22
             // '182.61.55.239', 'root', 'baikai#1234', 2025
-            // '192.168.0.100', 'fei00', '0000', 22
+            // '127.0.0.1', 'fei00', '0000', 22
+            "a.baikai.top", "baikai", "x+y-1=0?x&y", 2025
         );
+
 
 
     function download() {

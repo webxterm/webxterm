@@ -148,9 +148,12 @@ export class Parser {
     // 提示符的长度
     readonly promptSize: number = 0;
 
+    fragment: DocumentFragment;
+
     constructor(terminal: Terminal) {
         this.terminal = terminal;
         this.promptSize = terminal.prompt.length;
+        this.fragment = document.createDocumentFragment();
     }
 
     get x(){
@@ -270,6 +273,7 @@ export class Parser {
      * b'**\x18B0100000023be50\r\x8a\x11'
      *
      * @param text
+     * @param cb
      */
     parse(text: string) {
 
@@ -820,6 +824,8 @@ export class Parser {
 
         this.printer.printBuffer();
 
+        this.flush();
+
         this.terminal.scrollToBottomOnInput();
 
     }
@@ -830,8 +836,9 @@ export class Parser {
      * @param href 自定义超链接
      */
     handleDoubleChars(chr: string, href: string = "") {
-
-        if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(chr)) {
+        // See:
+        // https://blog.csdn.net/qq_22520587/article/details/62454354
+        if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(chr)) {
             // 双字节字符
             // 超过字数自动换行
             if (this.x > this.activeBuffer.columns) {
@@ -866,7 +873,6 @@ export class Parser {
 
             return true;
         }
-
         return false;
 
     }
@@ -963,7 +969,9 @@ export class Parser {
 
         this.activeBuffer.append(line);
 
-        this.viewport.appendChild(line.element);
+        this.append(line.element);
+        // this.fragment.appendChild(line.element);
+        // this.viewport.appendChild(line.element);
 
     }
 
@@ -1011,7 +1019,8 @@ export class Parser {
         let line = this.activeBuffer.getBlankLine();
 
         let afterNode = this.activeBuffer.insert(this.y, line)[0];
-        this.viewport.insertBefore(line.element, afterNode);
+        // this.viewport.insertBefore(line.element, afterNode);
+        this.insertBefore(line.element, afterNode);
 
         // 删除底部的行
         const y = this.activeBuffer.scrollBottom + 1;  // index = scrollBottom
@@ -1030,12 +1039,15 @@ export class Parser {
         if(this.activeBuffer.scrollBottom === this.terminal.rows){
             // 在底部添加
             this.activeBuffer.append(line);
-            this.viewport.appendChild(line.element);
+            this.append(line.element);
+            // this.viewport.appendChild(line.element);
+            // this.fragment.appendChild(line.element);
         } else {
             // 在后一行插入前
             const y = this.activeBuffer.scrollBottom + 1; // index = scrollBottom
             let afterNode = this.activeBuffer.insert(y, line)[0];
-            this.viewport.insertBefore(line.element, afterNode);
+            // this.viewport.insertBefore(line.element, afterNode);
+            this.insertBefore(line.element, afterNode);
         }
 
         // 在光标的位置删除行
@@ -1056,14 +1068,17 @@ export class Parser {
         if(this.activeBuffer.scrollBottom === this.terminal.rows){
             // 在底部添加
             this.activeBuffer.append(line);
-            this.viewport.appendChild(line.element);
+            this.append(line.element);
+            // this.fragment.appendChild(line.element);
+            // this.viewport.appendChild(line.element);
         } else {
             // 在后一行插入前
             // 在底行添加空行
             // rows = 24, scrollBottom = 24, y = 24
             const y = this.activeBuffer.scrollBottom + 1; // index = scrollBottom
             let afterNode = this.activeBuffer.insert(y, line)[0];
-            this.viewport.insertBefore(line.element, afterNode);
+            // this.viewport.insertBefore(line.element, afterNode);
+            this.insertBefore(line.element, afterNode);
         }
 
         // 删除顶行
@@ -1095,9 +1110,31 @@ export class Parser {
         // 顶部添加行
         let afterNode = this.activeBuffer.insert(this.activeBuffer.scrollTop, line)[0];
 
-        this.viewport.insertBefore(line.element, afterNode);
+        // this.viewport.insertBefore(line.element, afterNode);
+        this.insertBefore(line.element, afterNode);
 
+    }
 
+    /**
+     * 将fragment的内容输出
+     */
+    flush(){
+        this.viewport.appendChild(this.fragment);
+        this.fragment = document.createDocumentFragment();
+    }
+
+    append(newChild: Node){
+        this.viewport.appendChild(newChild);
+    }
+
+    /**
+     * 插入
+     * @param newChild
+     * @param refChild
+     */
+    insertBefore(newChild: Node, refChild: Node){
+        this.flush();
+        this.viewport.insertBefore(newChild, refChild);
     }
 
 

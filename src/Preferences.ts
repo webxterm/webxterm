@@ -239,12 +239,13 @@ export class Preferences {
         this.visualBellColor = "rgba(0,0,0,0.5)";
 
         // this.terminalType = "vt100";
-        this.terminalType = "xterm-256color";
+        this.terminalType = "xterm";
 
         // https://invisible-island.net/xterm/manpage/xterm.html#VT100-Widget-Resources:saveLines
         // saveLines (class SaveLines)
         //                Specifies the number of lines to save beyond the top of the
         //                screen when a scrollbar is turned on.  The default is "1024".
+        // max = 5.12w lines
         this.scrollBack = 51200;
 
         // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
@@ -321,15 +322,12 @@ export class Preferences {
         Styles.add([
             ".tab::selection",
             ".len2::selection",
-            ".inverse::selection",
             ".viewport-row::selection",
             ".tab::-moz-selection",
             ".len2::-moz-selection",
-            ".inverse::-moz-selection",
             ".viewport-row::-moz-selection",
             ".tab::-webkit-selection",
             ".len2::-webkit-selection",
-            ".inverse::-webkit-selection",
             ".viewport-row::-webkit-selection"], {
             "color": this.backgroundColor,
             "background-color": this.color

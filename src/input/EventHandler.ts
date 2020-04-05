@@ -82,8 +82,13 @@ export class EventHandler {
         container.addEventListener("paste", (e: ClipboardEvent) => {
             // console.info(e);
             clipboard.focus();
+            terminal.scrollToBottom();
             if(e.clipboardData){
-                this.paste(e.clipboardData.getData('text'), 'clipboard2', terminal);
+                let text = e.clipboardData.getData('text');
+                // this.paste(text.replace(/\n|\r\n/gi, '\x0d'), 'clipboard2', terminal);
+                this.sendMessage(terminal, {
+                    "cmd": text.replace(/\n|\r\n/gi, '\x0d')
+                });
             }
 
         });
@@ -104,7 +109,10 @@ export class EventHandler {
                 case 1:
                     // 滚轮（中键）按下
                     e.preventDefault();
-                    this.paste(this.selectionContent, 'mouse(wheel|middle)', terminal);
+                    this.sendMessage(terminal, {
+                        "cmd": this.selectionContent
+                    });
+                    // this.paste(this.selectionContent, 'mouse(wheel|middle)', terminal);
                     clipboard.focus();
 
                     break;
@@ -169,17 +177,17 @@ export class EventHandler {
                             width: (target.getBoundingClientRect().width - x) + "px"
                         }, terminal.instanceId);
 
-                        // setTimeout(() => {
-                        //
-                        //     Styles.add(".clipboard", {
-                        //         position: "",
-                        //         left: "",
-                        //         top: "",
-                        //         height: "",
-                        //         width: ""
-                        //     }, terminal.instanceId);
-                        //
-                        // }, 100);
+                        setTimeout(() => {
+
+                            Styles.add(".clipboard", {
+                                position: "",
+                                left: "",
+                                top: "",
+                                height: "",
+                                width: ""
+                            }, terminal.instanceId);
+
+                        }, 100);
                     }
                     break;
                 case 3:
@@ -228,8 +236,11 @@ export class EventHandler {
                 terminal.esParser.applicationCursorKeys,
                 terminal.parser.applicationKeypad);
 
-            this.paste(keySym, "key", terminal);
+            // this.paste(keySym, "key", terminal);
 
+            this.sendMessage(terminal, {
+                "cmd": keySym
+            });
 
             clipboard.focus();
         });
@@ -324,7 +335,11 @@ export class EventHandler {
                             compositionElement.innerHTML = this.composing.end;
 
                             // 发送内容给后台
-                            this.paste(this.composing.end, "composition", terminal);
+                            // this.paste(this.composing.end, "composition", terminal);
+
+                            this.sendMessage(terminal, {
+                                "cmd": this.composing.end
+                            });
 
                             this.composing.reset();
                             compositionElement.remove();
@@ -358,7 +373,10 @@ export class EventHandler {
                     this.composing.state = 3;
 
                     // 发送内容给后台
-                    this.paste(this.composing.end, "composition", terminal);
+                    // this.paste(this.composing.end, "composition", terminal);
+                    this.sendMessage(terminal, {
+                        "cmd": this.composing.end
+                    });
 
                     this.composing.reset();
                     compositionElement.remove();
@@ -371,7 +389,10 @@ export class EventHandler {
                 terminal.esParser.applicationCursorKeys,
                 terminal.parser.applicationKeypad);
 
-            this.paste(keySym, "key", terminal);
+            // this.paste(keySym, "key", terminal);
+            this.sendMessage(terminal, {
+                "cmd": keySym
+            });
 
             // 如果还没有满屏的话，不用滚动了
             if(terminal.bufferSet.activeBuffer.currentLineNum >= terminal.rows
@@ -453,7 +474,10 @@ export class EventHandler {
                     terminal.showCursor();
 
                     // 发送内容给后台
-                    this.paste(e.data, "composition", terminal);
+                    // this.paste(e.data, "composition", terminal);
+                    this.sendMessage(terminal, {
+                        "cmd": e.data
+                    });
 
                     // 重置
                     this.composing.reset();
@@ -607,5 +631,13 @@ export class EventHandler {
             }
 
         }
+    }
+
+    sendMessage(terminal: Terminal, data: object){
+        terminal.transceiver.send(JSON.stringify(data));
+        // terminal.sshWorker.postMessage({
+        //     "type": "put",
+        //     "data": data
+        // })
     }
 }

@@ -822,9 +822,9 @@ export class EscapeSequenceParser {
     // CSI Ps X  Erase Ps Character(s) (default = 1) (ECH).
     eraseChars(params: number[]) {
         const ps = params[0] || 1;
-        for (let i = this.parser.x; i < ps; i++) {
-            let block = this.activeBufferLine.get(this.parser.x);
-            block.erase(" ", this.attribute);
+        for (let i = this.parser.x, len = this.parser.x + ps; i < len; i++) {
+            let block = this.activeBufferLine.get(i);
+            if(block) block.erase(" ", this.attribute);
         }
 
     }

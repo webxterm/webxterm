@@ -111,6 +111,7 @@ class Parser {
         this.promptSize = 0;
         this.terminal = terminal;
         this.promptSize = terminal.prompt.length;
+        this.fragment = document.createDocumentFragment();
     }
     get x() {
         return this.activeBuffer.x;
@@ -591,10 +592,11 @@ class Parser {
         if (!this.activeBufferLine.dirty)
             this.activeBufferLine.dirty = true;
         this.printer.printBuffer();
+        this.flush();
         this.terminal.scrollToBottomOnInput();
     }
     handleDoubleChars(chr, href = "") {
-        if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(chr)) {
+        if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(chr)) {
             if (this.x > this.activeBuffer.columns) {
                 this.nextLine();
                 this.x = 1;
@@ -665,7 +667,7 @@ class Parser {
     newLine() {
         let line = this.activeBuffer.getBlankLine();
         this.activeBuffer.append(line);
-        this.viewport.appendChild(line.element);
+        this.append(line.element);
     }
     update(chr, href = "") {
         if (this.x > this.activeBuffer.columns) {
@@ -690,7 +692,7 @@ class Parser {
     insertLine() {
         let line = this.activeBuffer.getBlankLine();
         let afterNode = this.activeBuffer.insert(this.y, line)[0];
-        this.viewport.insertBefore(line.element, afterNode);
+        this.insertBefore(line.element, afterNode);
         const y = this.activeBuffer.scrollBottom + 1;
         this.activeBuffer.delete(y, 1, false);
     }
@@ -698,12 +700,12 @@ class Parser {
         const line = this.activeBuffer.getBlankLine();
         if (this.activeBuffer.scrollBottom === this.terminal.rows) {
             this.activeBuffer.append(line);
-            this.viewport.appendChild(line.element);
+            this.append(line.element);
         }
         else {
             const y = this.activeBuffer.scrollBottom + 1;
             let afterNode = this.activeBuffer.insert(y, line)[0];
-            this.viewport.insertBefore(line.element, afterNode);
+            this.insertBefore(line.element, afterNode);
         }
         this.activeBuffer.delete(this.y, 1, false);
     }
@@ -711,12 +713,12 @@ class Parser {
         let line = this.activeBuffer.getBlankLine();
         if (this.activeBuffer.scrollBottom === this.terminal.rows) {
             this.activeBuffer.append(line);
-            this.viewport.appendChild(line.element);
+            this.append(line.element);
         }
         else {
             const y = this.activeBuffer.scrollBottom + 1;
             let afterNode = this.activeBuffer.insert(y, line)[0];
-            this.viewport.insertBefore(line.element, afterNode);
+            this.insertBefore(line.element, afterNode);
         }
         const saveLines = this.activeBuffer.scrollTop === 1;
         const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, saveLines);
@@ -728,7 +730,18 @@ class Parser {
         let line = this.activeBuffer.getBlankLine();
         this.activeBuffer.delete(this.activeBuffer.scrollBottom, 1, false);
         let afterNode = this.activeBuffer.insert(this.activeBuffer.scrollTop, line)[0];
-        this.viewport.insertBefore(line.element, afterNode);
+        this.insertBefore(line.element, afterNode);
+    }
+    flush() {
+        this.viewport.appendChild(this.fragment);
+        this.fragment = document.createDocumentFragment();
+    }
+    append(newChild) {
+        this.viewport.appendChild(newChild);
+    }
+    insertBefore(newChild, refChild) {
+        this.flush();
+        this.viewport.insertBefore(newChild, refChild);
     }
 }
 exports.Parser = Parser;

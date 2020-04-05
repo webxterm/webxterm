@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 class Printer {
     constructor(terminal) {
+        this.timer = 0;
+        this.strings = [];
         this.terminal = terminal;
         this.parser = this.terminal.parser;
     }
@@ -27,12 +29,13 @@ class Printer {
         }
         let element;
         let leftClassName = "";
-        let strings = [];
         for (let x = 1; x <= line.blocks.length; x++) {
             let block = line.get(x);
             if (block.empty) {
                 continue;
             }
+            if (block.version === 0)
+                continue;
             let value = block.data, className = block.getClassName();
             switch (value) {
                 case ' ':
@@ -49,7 +52,7 @@ class Printer {
                 && this.parser.x === x
                 && line === this.cursorLine) {
                 if (!!leftClassName && element) {
-                    strings.push(element.outerHTML);
+                    this.strings.push(element.outerHTML);
                     element = undefined;
                     leftClassName = "";
                 }
@@ -69,7 +72,7 @@ class Printer {
                     this.terminal.cursor.color = pref.defaultCursorColor ? pref.color : pref.cursorColor;
                 }
                 this.terminal.cursor.extraClass = className;
-                strings.push(this.terminal.cursor.html);
+                this.strings.push(this.terminal.cursor.html);
                 continue;
             }
             if (!!className) {
@@ -78,14 +81,15 @@ class Printer {
                     element.className = className;
                 }
                 if (block.attribute.len2) {
-                    if (!!leftClassName)
-                        strings.push(element.outerHTML);
+                    if (!!leftClassName) {
+                        this.strings.push(element.outerHTML);
+                    }
                     element.className = className;
                     element.innerHTML = value;
                 }
                 else {
                     if (!!leftClassName && leftClassName !== className) {
-                        strings.push(element.outerHTML);
+                        this.strings.push(element.outerHTML);
                         element.className = className;
                     }
                     if (leftClassName === className) {
@@ -98,17 +102,17 @@ class Printer {
             }
             else {
                 if (!!leftClassName && element) {
-                    strings.push(element.outerHTML);
+                    this.strings.push(element.outerHTML);
                     element = undefined;
                 }
-                strings.push(value);
+                this.strings.push(value);
             }
             leftClassName = className;
         }
         if (!!leftClassName && element) {
-            strings.push(element.outerHTML);
+            this.strings.push(element.outerHTML);
         }
-        line.element.innerHTML = strings.join("");
+        line.element.innerHTML = this.strings.splice(0, this.strings.length).join("");
     }
 }
 exports.Printer = Printer;

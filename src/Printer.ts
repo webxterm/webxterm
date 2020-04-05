@@ -3,12 +3,18 @@ import {Parser} from "./parser/Parser";
 import {Terminal} from "./Terminal";
 import {Buffer} from "./buffer/Buffer";
 
+/**
+ * 数据打印
+ * 如果有大批量数据需要输出打印。
+ *
+ */
 export class Printer {
 
     private parser: Parser;
     private terminal: Terminal;
-    // private timerId: number = 0;
-    // private dirtyLines: BufferLine[] = [];
+    // innerHTML队列，实现后进先出
+    private timer: number = 0;
+    private strings: string[] = [];
 
     constructor(terminal: Terminal) {
         this.terminal = terminal;
@@ -23,39 +29,6 @@ export class Printer {
         return this.activeBuffer.get(this.parser.y);
     }
 
-    // /**
-    //  * 启动打印机
-    //  */
-    // printDirty(){
-    //
-    //     if(this.timerId){
-    //         return;
-    //     }
-    //
-    //     console.info("创建定时器");
-    //
-    //     //
-    //     this.timerId = setInterval(() => {
-    //
-    //         const dirtyLines = this.dirtyLines.splice(0, this.dirtyLines.length);
-    //         const len = dirtyLines.length;
-    //         if(len === 0) {
-    //             console.info("删除定时器");
-    //             clearInterval(this.timerId);
-    //             this.timerId = 0;
-    //             return;
-    //         }
-    //
-    //         for(let i = 0; i < len; i++){
-    //             if(dirtyLines[i] === this.cursorLine){
-    //                 this.printLine(dirtyLines[i], true);
-    //             } else {
-    //                 this.printLine(dirtyLines[i], false);
-    //             }
-    //         }
-    //
-    //     }, 0);
-    // }
 
     /**
      * 刷新数据到元素中
@@ -90,15 +63,10 @@ export class Printer {
             line.dirty = false;
         }
 
-        // 超链接 - 锚点
-        // let anchor: HTMLAnchorElement | undefined;
         let element: HTMLSpanElement | undefined;
         let leftClassName: string = "";
-        let strings: string[] = [];
-
-        // 当前行是否已经打印了光标，
-        // 这个需要判断是否在中间已经打印过，如果没有打印的话，需要在末尾打印。
-        // let printedCursor: boolean = false;
+        // let fragment = document.createDocumentFragment();
+        // let strings: string[] = [];
 
         for (let x = 1; x <= line.blocks.length; x++) {
 
@@ -108,16 +76,10 @@ export class Printer {
                 continue;
             }
 
+            if(block.version === 0) continue;
+
             let value = block.data,
                 className = block.getClassName();
-
-            // 超链接定义
-            // if(!!block.href){
-            //     anchor = document.createElement("a");
-            //     anchor.href = block.href;
-            // } else {
-            //     anchor = undefined;
-            // }
 
             // 特殊字符处理。
             switch (value) {
@@ -137,11 +99,12 @@ export class Printer {
 
             if(displayCursor
                 && this.parser.x === x
-                && line === this.cursorLine){
+                && line === this.cursorLine) {
 
-                if(!!leftClassName && element){
+                if (!!leftClassName && element) {
                     // 结束上一个。
-                    strings.push(element.outerHTML);
+                    // fragment.appendChild(element);
+                    this.strings.push(element.outerHTML);
                     element = undefined;
                     leftClassName = "";
                 }
@@ -154,22 +117,24 @@ export class Printer {
 
                 // 光标的颜色。
                 // 需要先设置背景
-                if(!!block.attribute.backgroundColorClass || !!attr.backgroundColorClass){
+                if (!!block.attribute.backgroundColorClass || !!attr.backgroundColorClass) {
                     this.terminal.cursor.backgroundColor = pref.getColor(block.attribute.backgroundColorClass || attr.backgroundColorClass);
                 } else {
                     this.terminal.cursor.backgroundColor = pref.defaultCursorColor ? pref.backgroundColor : pref.cursorBackgroundColor;
                 }
 
                 // 后设置前景
-                if(!!block.attribute.colorClass || !!attr.colorClass){
+                if (!!block.attribute.colorClass || !!attr.colorClass) {
                     this.terminal.cursor.color = pref.getColor(block.attribute.colorClass || attr.colorClass);
                 } else {
                     this.terminal.cursor.color = pref.defaultCursorColor ? pref.color : pref.cursorColor;
                 }
 
                 this.terminal.cursor.extraClass = className;
-                // printedCursor = true;
-                strings.push(this.terminal.cursor.html);
+
+                // fragment.appendChild(this.terminal.cursor.getElement());
+
+                this.strings.push(this.terminal.cursor.html);
 
                 continue;
             }
@@ -186,15 +151,18 @@ export class Printer {
                 }
 
                 if(block.attribute.len2){
-                    if(!!leftClassName)
-                        strings.push(element.outerHTML);
+                    if(!!leftClassName){
+                        // fragment.appendChild(element);
+                        this.strings.push(element.outerHTML);
+                    }
 
                     element.className = className;
                     element.innerHTML = value;
                 } else {
                     // 普通的样式
                     if(!!leftClassName && leftClassName !== className){
-                        strings.push(element.outerHTML);
+                        this.strings.push(element.outerHTML);
+                        // fragment.appendChild(element);
 
                         element.className = className;
                     }
@@ -212,13 +180,15 @@ export class Printer {
 
                 if(!!leftClassName && element){
                     // 之前含有样式
-                    strings.push(element.outerHTML);
+                    this.strings.push(element.outerHTML);
+                    // fragment.appendChild(element);
 
                     element = undefined;
                 }
 
                 // 没有存在样式
-                strings.push(value);
+                this.strings.push(value);
+                // fragment.appendChild(document.createTextNode(value));
 
             }
 
@@ -226,45 +196,12 @@ export class Printer {
         }
 
         if(!!leftClassName && element){
-            strings.push(element.outerHTML);
+            this.strings.push(element.outerHTML);
+            // fragment.appendChild(element);
         }
 
-        // if(displayCursor
-        //     && line === this.cursorLine
-        //     && !printedCursor){
-        //
-        //     this.terminal.cursor.value = "&nbsp;";
-        //
-        //
-        //     // 光标的颜色。
-        //     // 需要先设置背景
-        //     if(!!this.terminal.esParser.attribute.backgroundColorClass){
-        //         this.terminal.cursor.backgroundColor =
-        //             this.terminal.preferences.getColor(this.terminal.esParser.attribute.backgroundColorClass);
-        //     } else {
-        //         if(this.terminal.preferences.defaultCursorColor){
-        //             this.terminal.cursor.backgroundColor = this.terminal.preferences.backgroundColor;
-        //         } else {
-        //             this.terminal.cursor.backgroundColor = this.terminal.preferences.cursorBackgroundColor;
-        //         }
-        //     }
-        //
-        //     // 后设置前景
-        //     if(!!this.terminal.esParser.attribute.colorClass){
-        //         this.terminal.cursor.color =
-        //             this.terminal.preferences.getColor(this.terminal.esParser.attribute.colorClass);
-        //     } else {
-        //         if(this.terminal.preferences.defaultCursorColor){
-        //             this.terminal.cursor.color = this.terminal.preferences.color;
-        //         } else {
-        //             this.terminal.cursor.color = this.terminal.preferences.cursorColor;
-        //         }
-        //     }
-        //
-        //     strings.push(this.terminal.cursor.html);
-        // }
-
-        line.element.innerHTML = strings.join("");
+        line.element.innerHTML = this.strings.splice(0, this.strings.length).join("");
+        // line.element.appendChild(fragment);
 
     }
 
