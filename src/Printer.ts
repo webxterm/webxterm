@@ -1,7 +1,8 @@
-import {BufferLine} from "./buffer/BufferLine";
+// import {BufferLine} from "./buffer/BufferLine";
 import {Parser} from "./parser/Parser";
 import {Terminal} from "./Terminal";
 import {Buffer} from "./buffer/Buffer";
+import {DataBlockAttribute} from "./buffer/DataBlockAttribute";
 
 /**
  * 数据打印
@@ -12,9 +13,6 @@ export class Printer {
 
     private parser: Parser;
     private terminal: Terminal;
-    // innerHTML队列，实现后进先出
-    private timer: number = 0;
-    private strings: string[] = [];
 
     constructor(terminal: Terminal) {
         this.terminal = terminal;
@@ -25,10 +23,9 @@ export class Printer {
         return this.parser.bufferSet.activeBuffer;
     }
 
-    get cursorLine(): BufferLine {
-        return this.activeBuffer.get(this.parser.y);
+    get cursorLine(): HTMLElement {
+        return this.activeBuffer.get(this.activeBuffer.y);
     }
-
 
     /**
      * 刷新数据到元素中
@@ -39,72 +36,74 @@ export class Printer {
         const len = this.activeBuffer.size;
 
         for (let y = 1; y <= len; y++) {
+            if(!this.activeBuffer.isDirty(y)){
+                continue;
+            }
+            this.activeBuffer.updateDirty(y, false);
 
-            const line = this.activeBuffer.get(y);
-            this.printLine(line, true);
-
+            this.printLine(this.activeBuffer.get(y), this.activeBuffer.getBlocks(y), true);
         }
 
     }
 
     /**
      * 打印脏行
-     * @param line
+     * @param container
+     * @param blocks
      * @param displayCursor 是否显示光标
      */
-    printLine(line: BufferLine, displayCursor: boolean = false){
+    printLine(container: HTMLElement, blocks: string[], displayCursor: boolean = false){
 
-        // 如果没有脏块的话，直接返回。
-        if(!line.dirty){
-            return;
-        }
+        let element: HTMLSpanElement | undefined,
+            leftClassName: string = "",
+            strings: string[] = [];
 
-        if(line !== this.cursorLine){
-            line.dirty = false;
-        }
+        for (let x = 1,
+                 len = blocks.length,
+                 value,
+                 className,
+                 color,
+                 bgColor,
+                 len2,
+                 block: string; x <= len; x++) {
 
-        let element: HTMLSpanElement | undefined;
-        let leftClassName: string = "";
-        // let fragment = document.createDocumentFragment();
-        // let strings: string[] = [];
+            block = blocks[x - 1];
 
-        for (let x = 1; x <= line.blocks.length; x++) {
+            // 空块
+            if(!block || block.length == 0) continue;
 
-            let block = line.get(x);
+            value = block.charAt(0);
+            // 解析样式
+            [className, color, bgColor]  = DataBlockAttribute.parseClassName(block.substring(2));
+            len2 = block.charAt(1) == "1";
 
-            if (block.empty) {
-                continue;
+            if(len2){
+                className = !!className ? className += " len2": "len2";
             }
-
-            if(block.version === 0) continue;
-
-            let value = block.data,
-                className = block.getClassName();
 
             // 特殊字符处理。
             switch (value) {
-                case ' ':
-                    value = '&nbsp;';
-                    break;
+                // case ' ':
+                    // value = '&nbsp;';
+                    // break;
                 case '>':
                     value = '&gt;';
                     break;
                 case '<':
                     value = '&lt;';
                     break;
-                // case '\t':
-                //     block.attribute.tab = true;
-                //     break;
+                case '\t':
+                    className = !!className ? className += " tab": "tab";
+                    break;
             }
 
             if(displayCursor
                 && this.parser.x === x
-                && line === this.cursorLine) {
+                && this.cursorLine === container) {       // cursor line
 
                 if (!!leftClassName && element) {
                     // 结束上一个。
-                    // fragment.appendChild(element);
-                    this.strings.push(element.outerHTML);
+                    strings.push(element.outerHTML);
                     element = undefined;
                     leftClassName = "";
                 }
@@ -117,24 +116,22 @@ export class Printer {
 
                 // 光标的颜色。
                 // 需要先设置背景
-                if (!!block.attribute.backgroundColorClass || !!attr.backgroundColorClass) {
-                    this.terminal.cursor.backgroundColor = pref.getColor(block.attribute.backgroundColorClass || attr.backgroundColorClass);
+                if (!!bgColor || !!attr.backgroundColorClass) {
+                    this.terminal.cursor.backgroundColor = pref.getColor(bgColor || attr.backgroundColorClass);
                 } else {
                     this.terminal.cursor.backgroundColor = pref.defaultCursorColor ? pref.backgroundColor : pref.cursorBackgroundColor;
                 }
 
                 // 后设置前景
-                if (!!block.attribute.colorClass || !!attr.colorClass) {
-                    this.terminal.cursor.color = pref.getColor(block.attribute.colorClass || attr.colorClass);
+                if (!!color || !!attr.colorClass) {
+                    this.terminal.cursor.color = pref.getColor(color || attr.colorClass);
                 } else {
                     this.terminal.cursor.color = pref.defaultCursorColor ? pref.color : pref.cursorColor;
                 }
 
                 this.terminal.cursor.extraClass = className;
 
-                // fragment.appendChild(this.terminal.cursor.getElement());
-
-                this.strings.push(this.terminal.cursor.html);
+                strings.push(this.terminal.cursor.html);
 
                 continue;
             }
@@ -150,10 +147,10 @@ export class Printer {
                     element.className = className;
                 }
 
-                if(block.attribute.len2){
+                if(len2){
+                    // len2
                     if(!!leftClassName){
-                        // fragment.appendChild(element);
-                        this.strings.push(element.outerHTML);
+                        strings.push(element.outerHTML);
                     }
 
                     element.className = className;
@@ -161,9 +158,7 @@ export class Printer {
                 } else {
                     // 普通的样式
                     if(!!leftClassName && leftClassName !== className){
-                        this.strings.push(element.outerHTML);
-                        // fragment.appendChild(element);
-
+                        strings.push(element.outerHTML);
                         element.className = className;
                     }
 
@@ -180,14 +175,12 @@ export class Printer {
 
                 if(!!leftClassName && element){
                     // 之前含有样式
-                    this.strings.push(element.outerHTML);
-                    // fragment.appendChild(element);
-
+                    strings.push(element.outerHTML);
                     element = undefined;
                 }
 
                 // 没有存在样式
-                this.strings.push(value);
+                strings.push(value);
                 // fragment.appendChild(document.createTextNode(value));
 
             }
@@ -196,13 +189,133 @@ export class Printer {
         }
 
         if(!!leftClassName && element){
-            this.strings.push(element.outerHTML);
-            // fragment.appendChild(element);
+            strings.push(element.outerHTML);
         }
 
-        line.element.innerHTML = this.strings.splice(0, this.strings.length).join("");
-        // line.element.appendChild(fragment);
+        container.innerHTML = strings.join("").replace(/(\s*$)/g, "");
 
     }
+
+
+
+    // /**
+    //  * 打印脏行
+    //  * @param line
+    //  */
+    // static getLineInnerHTML(line: BufferLine){
+    //
+    //     let element: HTMLSpanElement | undefined;
+    //     let leftClassName: string = "";
+    //     // let fragment = document.createDocumentFragment();
+    //     let strings: string[] = [];
+    //
+    //     for (let x = 1; x <= line.blocks.length; x++) {
+    //
+    //         let block = line.get(x);
+    //
+    //         if (block.empty) {
+    //             continue;
+    //         }
+    //
+    //         if(block.version === 0) continue;
+    //
+    //         let value = block.data,
+    //             className = block.getClassName();
+    //
+    //         // 特殊字符处理。
+    //         // switch (value) {
+    //         //     case ' ':
+    //         //         value = '&nbsp;';
+    //         //         break;
+    //         //     case '>':
+    //         //         value = '&gt;';
+    //         //         break;
+    //         //     case '<':
+    //         //         value = '&lt;';
+    //         //         break;
+    //         //     // case '\t':
+    //         //     //     block.attribute.tab = true;
+    //         //     //     break;
+    //         // }
+    //
+    //         // 样式不同
+    //         // 含有len2(由于间隙问题，要求每一个字符一个span存储)
+    //         // 不存在样式。
+    //         if(!!className){
+    //
+    //             // 存在样式
+    //             if(!element){
+    //                 element = document.createElement("span");
+    //                 element.className = className;
+    //             }
+    //
+    //             if(block.attribute.len2){
+    //                 if(!!leftClassName){
+    //                     // fragment.appendChild(element);
+    //                     strings.push(element.outerHTML);
+    //                 }
+    //
+    //                 element.className = className;
+    //                 element.innerHTML = value;
+    //             } else {
+    //                 // 普通的样式
+    //                 if(!!leftClassName && leftClassName !== className){
+    //                     strings.push(element.outerHTML);
+    //                     // fragment.appendChild(element);
+    //
+    //                     element.className = className;
+    //                 }
+    //
+    //                 if(leftClassName === className){
+    //                     element.innerHTML = element.innerHTML + value;
+    //                 } else {
+    //                     element.innerHTML = value;
+    //                 }
+    //
+    //             }
+    //
+    //
+    //         } else {
+    //
+    //             if(!!leftClassName && element){
+    //                 // 之前含有样式
+    //                 strings.push(element.outerHTML);
+    //                 // fragment.appendChild(element);
+    //
+    //                 element = undefined;
+    //             }
+    //
+    //             // 没有存在样式
+    //             strings.push(value);
+    //             // fragment.appendChild(document.createTextNode(value));
+    //
+    //         }
+    //
+    //         leftClassName = className;
+    //     }
+    //
+    //     if(!!leftClassName && element){
+    //         strings.push(element.outerHTML);
+    //         // fragment.appendChild(element);
+    //     }
+    //
+    //     return strings.join("");
+    //
+    // }
+
+
+
+    // replaceHTML(el: HTMLDivElement, html: string): HTMLDivElement {
+    //
+    //     let newEl = el.cloneNode(false);
+    //
+    //     (<HTMLDivElement>newEl).innerHTML = html;
+    //
+    //     if(el.parentElement)
+    //         el.parentElement.replaceChild(newEl, el);
+    //
+    //     return (<HTMLDivElement>newEl);
+    // }
+
 
 }

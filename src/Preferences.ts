@@ -35,7 +35,7 @@ export class Preferences {
         "Tango dark": ["#D3D7CF", "#2E3436"],
         "Solarized light": ["#657B83", "#FDF6E3"],
         "Solarized dark": ["#839496", "#002B36"],
-        "Custom": ["#839496", "#002B36"],
+        "Custom": ["#B1B1B1", "#000000"],
     };
 
     // 光标轮廓可用值
@@ -209,18 +209,20 @@ export class Preferences {
      */
     init(): void {
 
-        this.colorScheme = "Tango dark";
+        this.colorScheme = "Custom";
         this.boldColor = "#FF6666";
         this.highlightColor = "#FFFFFF";
         this.highlightBackgroundColor = "#000000";
 
         this.transparentBackground = 0.5;
-        this.cursorShape = "Block";
+        // this.cursorShape = "Block";
         // this.cursorShape = "I-Beam";
+        this.cursorShape = "Wide Underline";
+
         this.cursorColor = "red";
         this.cursorBackgroundColor = "#FF6666";
         this.defaultCursorColor = true;
-        this.cursorBlinking = false;
+        this.cursorBlinking = true;
 
         // this.backgroundImage = "../images/default-background.png";
         this.backgroundRepeat = true;
@@ -230,8 +232,8 @@ export class Preferences {
         // this.fontFamily = new DejaVuSansMono();
         this.fontSize = Preferences.defaultFontSize;
 
-        this.showBoldTextInBrightColor = false;
-        this.paletteScheme = "Tango";
+        this.showBoldTextInBrightColor = true;
+        this.paletteScheme = "Linux console";
 
         this.scrollToBottomOnInput = true;
 
@@ -239,14 +241,14 @@ export class Preferences {
         this.visualBellColor = "rgba(0,0,0,0.5)";
 
         // this.terminalType = "vt100";
-        this.terminalType = "xterm";
+        this.terminalType = "linux";
 
         // https://invisible-island.net/xterm/manpage/xterm.html#VT100-Widget-Resources:saveLines
         // saveLines (class SaveLines)
         //                Specifies the number of lines to save beyond the top of the
         //                screen when a scrollbar is turned on.  The default is "1024".
-        // max = 5.12w lines
-        this.scrollBack = 51200;
+        // max = 9999 lines
+        this.scrollBack = 9999;
 
         // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
         this.tabSize = 8;  // 默认是8
@@ -502,7 +504,7 @@ export class Preferences {
 
             Styles.add([".cursor.cursor-shape-block.cursor-focus.cursor-blink",
                 ".cursor.cursor-focus .outline.cursor-blink"], {
-                "animation": `cursor-blink-${this.instanceId} 1s steps(1, end) infinite;`
+                "animation": `cursor-blink-${this.instanceId} 0.4s steps(1, end) infinite;`
             }, this.instanceId);
 
             // 光标闪烁
@@ -843,9 +845,9 @@ export class Preferences {
     set enableHeartbeat(value: boolean) {
         this._enableHeartbeat = value;
 
-        if(this.terminal.transceiver){
-            this.terminal.transceiver.enableHeartbeat = value;
-        }
+        // if(this.terminal.transceiver){
+        //     this.terminal.transceiver.enableHeartbeat = value;
+        // }
     }
 
     get nextHeartbeatSeconds(): number {
@@ -855,9 +857,9 @@ export class Preferences {
     set nextHeartbeatSeconds(value: number) {
         this._nextHeartbeatSeconds = value;
 
-        if(this.terminal.transceiver){
-            this.terminal.transceiver.nextHeartbeatSeconds = value;
-        }
+        // if(this.terminal.transceiver){
+        //     this.terminal.transceiver.nextHeartbeatSeconds = value;
+        // }
     }
 
     set scrollbar(value: boolean) {

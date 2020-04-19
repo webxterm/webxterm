@@ -1,6 +1,6 @@
 import {Buffer} from "./Buffer";
 import {BufferLine} from "./BufferLine";
-import {DataBlock} from "./DataBlock";
+// import {DataBlock} from "./DataBlock";
 
 // http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-The-Alternate-Screen-Buffer
 export class BufferSet {
@@ -31,7 +31,7 @@ export class BufferSet {
         return <Buffer>this._activeBuffer;
     }
 
-    get activeBufferLine(): BufferLine {
+    get activeBufferLine(): HTMLElement {
         if(!this._activeBuffer){
             throw new Error("_activeBuffer is " + this._activeBuffer);
         }
@@ -72,13 +72,15 @@ export class BufferSet {
             throw new Error("_alt is " + this._alt);
         }
 
-        for(let i = 0; i < this._normal.size; i++){
-            let line: BufferLine = this._normal.lines[i];
-            if(line && !line.used){
-                // 没有试过用
-                line.element.remove();
-            }
-        }
+        // for(let i = 0; i < this._normal.size; i++){
+        //     let line: BufferLine = this._normal.lines[i];
+        //     if(line && !line.used){
+        //         // 没有试过用
+        //         line.element.remove();
+        //     }
+        // }
+
+
 
         this._alt.clear();
 
@@ -139,36 +141,36 @@ export class BufferSet {
      */
     printAllLines(){
 
-        let strings = "";
-        
-        function printLine(line: BufferLine) {
-            let str = "";
-            for(let block of line.blocks){
-                str += block.data;
-            }
-            return str + "\r\n";
-        }
-
-        if(!this._normal){
-            throw new Error("_normal is " + this._normal);
-        }
-
-        for(let savedLine of this._normal.savedLines){
-            strings += printLine(savedLine);
-        }
-
-        // 如果当前的缓冲区是备用缓冲区的话，需要将默认的缓冲区的内容也输出、
-        if(this.isAlt){
-            for(let bufferLine of this._normal.lines){
-                strings += printLine(bufferLine);
-            }
-        }
-
-        for(let bufferLine of this.activeBuffer.lines){
-            strings += printLine(bufferLine);
-        }
-
-        return strings;
+        // let strings = "";
+        //
+        // function printLine(line: BufferLine) {
+        //     let str = "";
+        //     for(let block of line.blocks){
+        //         str += block.data;
+        //     }
+        //     return str + "\r\n";
+        // }
+        //
+        // if(!this._normal){
+        //     throw new Error("_normal is " + this._normal);
+        // }
+        //
+        // for(let savedLine of this._normal.savedLines2){
+        //     strings += savedLine;
+        // }
+        //
+        // // 如果当前的缓冲区是备用缓冲区的话，需要将默认的缓冲区的内容也输出、
+        // if(this.isAlt){
+        //     for(let bufferLine of this._normal.lines){
+        //         strings += printLine(bufferLine);
+        //     }
+        // }
+        //
+        // for(let bufferLine of this.activeBuffer.lines){
+        //     strings += printLine(bufferLine);
+        // }
+        //
+        // return strings;
 
     }
 }

@@ -1,7 +1,7 @@
 import {Terminal} from "../Terminal";
 import {Parser} from "./Parser";
-import {DataBlock} from "../buffer/DataBlock";
-import {BufferLine} from "../buffer/BufferLine";
+// import {DataBlock} from "../buffer/DataBlock";
+// import {BufferLine} from "../buffer/BufferLine";
 import {DataBlockAttribute} from "../buffer/DataBlockAttribute";
 import {Preferences} from "../Preferences";
 import {Styles} from "../Styles";
@@ -119,8 +119,12 @@ export class EscapeSequenceParser {
         return this._insertMode;
     }
 
-    get activeBufferLine(): BufferLine {
-        return this.parser.bufferSet.activeBufferLine;
+    // get activeBufferLine(): HTMLElement {
+    //     return this.parser.bufferSet.activeBufferLine;
+    // }
+
+    get activeBufferBlocks(): string[] {
+        return this.activeBuffer.getBlocks(this.activeBuffer.y);
     }
 
     get activeBuffer(): Buffer {
@@ -414,7 +418,7 @@ export class EscapeSequenceParser {
                 // b'\x1b[1@E\x1b[1@e\x1b[1@Q\x1b[1@A\x1b[1@A\x1b[1@A\x1b[1@a\x1b[1@2\x1b[1@v\x1b[1@0\x1b[1@r\x1b[1@M\x1b[1@5\x1b[1@6\x1b[1@7\x1b[1@U' 
                 // 接着添加一个单引号
                 // b"\x1b[C\x1b[1@'\x08"
-                this.activeBufferLine.insert(this.parser.x, DataBlock.newBlock(" ", this.attribute));
+                this.activeBuffer.insertBlocks(this.parser.y, this.parser.x, Buffer.newBlock(" ", this.attribute));
             }
         }
 
@@ -535,7 +539,7 @@ export class EscapeSequenceParser {
     cursorForwardTabulation(params: number[]) {
         const ps = params[0] || 1;
         for (let i = 0; i < ps; i++) {
-            this.activeBufferLine.replace(this.parser.x, DataBlock.newBlock("\t", this.attribute));
+            this.activeBuffer.replaceBlocks(this.parser.y, this.parser.x, Buffer.newBlock("\t", this.attribute));
             this.parser.x++;
         }
     }
@@ -598,20 +602,30 @@ export class EscapeSequenceParser {
             if (scrollBack) {
 
                 // 删除第一行
-                const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, scrollBack);
-                for(let savedLine of savedLines){
-                    this.terminal.printer.printLine(savedLine, false);
+                const savedLines: any = this.activeBuffer.delete2(this.activeBuffer.scrollTop, 1, scrollBack);
+                // savedLines['dirties']
+                // savedLines['blocks']
+                // savedLines['elements']
+
+                if(savedLines['elements']){
+                    let index = 0;
+                    for(let element of savedLines['elements']){
+                        this.parser.printer.printLine(element, savedLines['blocks'][index], false);
+                        index++;
+                    }
                 }
+                // for(let savedLine of savedLines){
+                //     this.terminal.printer.printLine(savedLine, false);
+                // }
 
                 // 底部添加行
-                let line = this.activeBuffer.getBlankLine();
-                this.activeBuffer.append(line);
-                fragment.appendChild(line.element);
+                let line = this.activeBuffer.getBlankLine2();
+                this.activeBuffer.append2(this.activeBuffer.getBlankBlocks(), line);
+                fragment.appendChild(line);
 
             } else {
-                const line = this.activeBuffer.get(y);
                 // 抹除当前行，抹除当前链数据
-                line.erase(this.attribute);
+                this.activeBuffer.eraseLine(y, this.attribute);
             }
 
         }
@@ -638,7 +652,7 @@ export class EscapeSequenceParser {
 
         let begin: number = 1,
             end: number,
-            blockSize: number = this.activeBufferLine.blocks.length;
+            blockSize: number = this.activeBufferBlocks.length;
         switch (params[0]) {
             case 1:
                 end = this.parser.x;
@@ -652,9 +666,8 @@ export class EscapeSequenceParser {
                 break;
         }
 
-        for (let i = begin, block; i <= end; i++) {
-            block = this.activeBufferLine.get(i);
-            block.erase(" ", this.attribute);
+        for (let i = begin; i <= end; i++) {
+            this.activeBuffer.eraseBlock(this.parser.y, i, this.attribute);
         }
 
     }
@@ -697,7 +710,7 @@ export class EscapeSequenceParser {
     // CSI Ps P  Delete Ps Character(s) (default = 1) (DCH).
     deleteChars(params: number[]) {
         const ps = params[0] || 1;
-        this.activeBufferLine.delete(this.parser.x, ps);
+        this.activeBuffer.deleteBlocks(this.parser.y, this.parser.x, ps);
     }
 
     /**
@@ -823,8 +836,7 @@ export class EscapeSequenceParser {
     eraseChars(params: number[]) {
         const ps = params[0] || 1;
         for (let i = this.parser.x, len = this.parser.x + ps; i < len; i++) {
-            let block = this.activeBufferLine.get(i);
-            if(block) block.erase(" ", this.attribute);
+            this.activeBuffer.eraseBlock(this.parser.y, i, this.attribute);
         }
 
     }
@@ -1948,7 +1960,7 @@ export class EscapeSequenceParser {
                 this._attribute = new DataBlockAttribute();
                 break;
             case 1:
-                this._attribute.bold = true;
+                this._attribute.bold = 1;
                 // 加粗高亮配置
                 if (this.preferences.showBoldTextInBrightColor) {
                     if (!!this.attribute.colorClass) {
@@ -1958,56 +1970,56 @@ export class EscapeSequenceParser {
                 }
                 break;
             case 2:
-                this._attribute.faint = true;
+                this._attribute.faint = 1;
                 break;
             case 3:
-                this._attribute.italic = true;
+                this._attribute.italic = 1;
                 break;
             case 4:
-                this._attribute.underline = true;
+                this._attribute.underline = 1;
                 break;
             case 5:
-                this._attribute.slowBlink = true;
+                this._attribute.slowBlink = 1;
                 break;
             case 6:
-                this._attribute.rapidBlink = true;
+                this._attribute.rapidBlink = 1;
                 break;
             case 7:
-                this._attribute.inverse = true;
+                this._attribute.inverse = 1;
                 break;
             case 8:
-                this._attribute.invisible = true;
+                this._attribute.invisible = 1;
                 break;
             case 9:
-                this._attribute.crossedOut = true;
+                this._attribute.crossedOut = 1;
                 break;
             case 21:
-                this._attribute.bold = false;
+                this._attribute.bold = 0;
                 break;
             case 22:
-                this._attribute.bold = false;
-                this._attribute.faint = false;
+                this._attribute.bold = 0;
+                this._attribute.faint = 0;
                 break;
             case 23:
-                this._attribute.italic = false;
+                this._attribute.italic = 0;
                 break;
             case 24:
-                this._attribute.underline = false;
+                this._attribute.underline = 0;
                 break;
             case 25:
-                this._attribute.slowBlink = false;
+                this._attribute.slowBlink = 0;
                 break;
             case 26:
-                this._attribute.rapidBlink = false;
+                this._attribute.rapidBlink = 0;
                 break;
             case 27:
-                this._attribute.inverse = false;
+                this._attribute.inverse = 0;
                 break;
             case 28:
-                this._attribute.invisible = false;
+                this._attribute.invisible = 0;
                 break;
             case 29:
-                this._attribute.crossedOut = false;
+                this._attribute.crossedOut = 0;
                 break;
             case 38:
                 // 38;5;2m

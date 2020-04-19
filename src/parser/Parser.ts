@@ -1,7 +1,6 @@
 import {Terminal} from "../Terminal";
-import {BufferLine} from "../buffer/BufferLine";
+// import {BufferLine} from "../buffer/BufferLine";
 import {Buffer} from "../buffer/Buffer";
-import {DataBlock} from "../buffer/DataBlock";
 import {Printer} from "../Printer";
 import {BufferSet} from "../buffer/BufferSet";
 
@@ -20,9 +19,9 @@ import {BufferSet} from "../buffer/BufferSet";
 // const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 // const [TAB_COMPLETION_LENGTH, TAB_COMPLETION_CHAR] = [8, "&nbsp;"];
 
-enum State {
-    NORMAL, ESC, CSI, OSC, CHARSET, DCS, IGNORE, PM, APC
-}
+const State = {
+    NORMAL: 0, ESC: 1, CSI: 2, OSC: 3, CHARSET: 4, DCS: 5, IGNORE: 6, PM: 7, APC:8
+};
 
 // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
 
@@ -137,7 +136,7 @@ export class Parser {
     private suffix: string = "";
 
     // 当前的状态
-    private state: State = State.NORMAL;
+    private state: number = State.NORMAL;
 
     private _gLevel: number = 0;
     private _gCharset: number = 0;
@@ -148,12 +147,9 @@ export class Parser {
     // 提示符的长度
     readonly promptSize: number = 0;
 
-    fragment: DocumentFragment;
-
     constructor(terminal: Terminal) {
         this.terminal = terminal;
         this.promptSize = terminal.prompt.length;
-        this.fragment = document.createDocumentFragment();
     }
 
     get x(){
@@ -181,8 +177,8 @@ export class Parser {
 
         this.activeBuffer.y = value;
 
-        if(!this.activeBufferLine.dirty)
-            this.activeBufferLine.dirty = true;
+        if(!this.activeBuffer.isDirty(value))
+            this.activeBuffer.updateDirty(value, true);
     }
 
     get bufferSet(): BufferSet {
@@ -213,7 +209,7 @@ export class Parser {
         return this.terminal.viewport;
     }
 
-    get activeBufferLine(): BufferLine{
+    get activeBufferLine(): HTMLElement {
         return this.activeBuffer.activeBufferLine;
     }
 
@@ -229,8 +225,7 @@ export class Parser {
         // 需要将默认缓冲区的内容输出
         const len = this.activeBuffer.size;
         for (let y = 1; y <= len; y++) {
-            const line = this.activeBuffer.get(y);
-            this.printer.printLine(line, false);
+            this.printer.printLine(this.activeBuffer.get(y), this.activeBuffer.getBlocks(y), false);
         }
 
         this.bufferSet.activateAltBuffer();
@@ -246,7 +241,7 @@ export class Parser {
         // 删除备用缓冲区的内容
         const lines = this.bufferSet.activeBuffer.lines;
         for(let i = 0, len = lines.length; i < len; i++){
-            lines[i].element.remove();
+            lines[i].remove();
         }
 
         this.bufferSet.activateNormalBuffer();
@@ -256,14 +251,14 @@ export class Parser {
         // 将没有使用过的行添加到viewport的尾部
         // 由于切换到备用缓冲区的时候，被删掉。
         // See: this.bufferSet.activateAltBuffer()
-       let fragment = document.createDocumentFragment();
-       for(let y = 1; y <= this.activeBuffer.size; y++){
-           let line = this.activeBuffer.get(y);
-           if(line && !line.used){
-               fragment.appendChild(line.element);
-           }
-       }
-       this.viewport.appendChild(fragment);
+       // let fragment = document.createDocumentFragment();
+       // for(let y = 1; y <= this.activeBuffer.size; y++){
+       //     let line = this.activeBuffer.get(y);
+       //     if(line && !line.used){
+       //         fragment.appendChild(line.element);
+       //     }
+       // }
+       // this.viewport.appendChild(fragment);
     }
 
     /**
@@ -273,9 +268,9 @@ export class Parser {
      * b'**\x18B0100000023be50\r\x8a\x11'
      *
      * @param text
-     * @param cb
+     * @param callback
      */
-    parse(text: string) {
+    parse(text: string, callback: Function | undefined = undefined) {
 
         let leftChr: string = ""
             , chr: string = "";
@@ -333,13 +328,13 @@ export class Parser {
                         // case C0.SP:
                         //     // Space.
                         //     break;
-                        case C0.HT:
-                            // Horizontal Tab (HTS  is Ctrl-I).
-                            // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
-                            // 制表符
-                            // \t是补全当前字符串长度到8的整数倍,最少1个最多8个空格
-                            this.tab();
-                            break;
+                        // case C0.HT:
+                        //     // Horizontal Tab (HTS  is Ctrl-I).
+                        //     // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
+                        //     // 制表符
+                        //     // \t是补全当前字符串长度到8的整数倍,最少1个最多8个空格
+                        //     this.tab();
+                        //     break;
                         case C0.VT:
                             // Vertical Tab (VT  is Ctrl-K).
                             this.nextLine();
@@ -819,14 +814,18 @@ export class Parser {
         }
 
         // 为了确保最后一个是定位，如\x1b[H，需要将当前行设置为脏行。
-        if(!this.activeBufferLine.dirty)
-            this.activeBufferLine.dirty = true;
+        if(!this.activeBuffer.isDirty(this.y))
+            this.activeBuffer.updateDirty(this.y, true);
 
         this.printer.printBuffer();
 
-        this.flush();
+        // this.flush();
 
         this.terminal.scrollToBottomOnInput();
+
+        if(callback){
+            callback();
+        }
 
     }
 
@@ -848,26 +847,20 @@ export class Parser {
 
             // 添加数据
             // 占用两个位置
-            let block = DataBlock.newBlock(chr, this.terminal.esParser.attribute);
-            block.attribute.len2 = true;
-            if(!!href){
-                block.href = href;
-            }
-
+            let block = Buffer.newLen2Block(chr, this.terminal.esParser.attribute);
             // 空块
-            let block2 = DataBlock.newEmptyBlock();
-            block2.empty = true;
+            let block2 = Buffer.newEmptyBlock();
 
             if(this.terminal.esParser.insertMode){
                 // 在光标的面前插入
-                this.activeBufferLine.insert(this.x, block, block2);
+                this.activeBuffer.insertBlocks(this.y, this.x, block, block2);
             } else if(this.terminal.esParser.replaceMode){ // 默认
                 // 更新缓冲区的内容
-                this.activeBufferLine.replace(this.x, block, block2);
+                this.activeBuffer.replaceBlocks(this.y, this.x, block, block2);
             }
 
-            if(!this.activeBufferLine.dirty)
-                this.activeBufferLine.dirty = true;
+            if(!this.activeBuffer.isDirty(this.y))
+                this.activeBuffer.updateDirty(this.y, true);
 
             this.x += 2;
 
@@ -877,18 +870,18 @@ export class Parser {
 
     }
 
-    /**
-     * 制表符(\t)
-     * 规则：\t是补全当前字符串长度到8的整数倍,最少1个最多8个空格
-     */
-    private tab(){
-        // 需要补多少个空格
-        const tabSize = this.terminal.preferences.tabSize;
-        let spCount = tabSize - ((this.x - 1) % tabSize);
-        for(let i = 0; i < spCount; i++){
-            this.update(" ");
-        }
-    }
+    // /**
+    //  * 制表符(\t)
+    //  * 规则：\t是补全当前字符串长度到8的整数倍,最少1个最多8个空格
+    //  */
+    // private tab(){
+    //     // 需要补多少个空格
+    //     const tabSize = this.terminal.preferences.tabSize;
+    //     let spCount = tabSize - ((this.x - 1) % tabSize);
+    //     for(let i = 0; i < spCount; i++){
+    //         this.update(" ");
+    //     }
+    // }
 
     /**
      * 正向索引
@@ -946,7 +939,8 @@ export class Parser {
      */
     saveCursor() {
 
-        this.printer.printLine(this.activeBuffer.get(this.y));
+        this.printer.printLine(this.activeBuffer.get(this.y),
+            this.activeBuffer.getBlocks(this.y), false);
 
         this.activeBuffer.savedY = this.y;
         this.activeBuffer.savedX = this.x;
@@ -965,13 +959,11 @@ export class Parser {
      */
     newLine(){
 
-        let line = this.activeBuffer.getBlankLine();
+        let line = this.activeBuffer.getBlankLine2();
 
-        this.activeBuffer.append(line);
+        this.activeBuffer.append2(this.activeBuffer.getBlankBlocks(), line);
 
-        this.append(line.element);
-        // this.fragment.appendChild(line.element);
-        // this.viewport.appendChild(line.element);
+        this.append(line);
 
     }
 
@@ -989,21 +981,18 @@ export class Parser {
             this.x = 1;
         }
 
-        let block = DataBlock.newBlock(chr, this.terminal.esParser.attribute);
-        if(!!href){
-            block.href = href;
-        }
+        let block = Buffer.newBlock(chr, this.terminal.esParser.attribute);
         if(this.terminal.esParser.insertMode){
             // 在光标的面前插入
-            this.activeBufferLine.insert(this.x, block);
+            this.activeBuffer.insertBlocks(this.y, this.x, block);
         } else if(this.terminal.esParser.replaceMode){ // 默认
             // 更新缓冲区的内容
-            this.activeBufferLine.replace(this.x, block);
+            this.activeBuffer.replaceOneBlock(this.y, this.x, block);
             this.x += 1;
         }
 
-        if(!this.activeBufferLine.dirty){
-            this.activeBufferLine.dirty = true;
+        if(!this.activeBuffer.isDirty(this.y)){
+            this.activeBuffer.updateDirty(this.y, true);
         }
 
 
@@ -1016,15 +1005,14 @@ export class Parser {
     insertLine(){
 
         // 在指定的位置插入一行
-        let line = this.activeBuffer.getBlankLine();
+        let line = this.activeBuffer.getBlankLine2();
 
-        let afterNode = this.activeBuffer.insert(this.y, line)[0];
-        // this.viewport.insertBefore(line.element, afterNode);
-        this.insertBefore(line.element, afterNode);
+        let afterNode = this.activeBuffer.insert(this.y, line);
+        this.insertBefore(line, afterNode);
 
         // 删除底部的行
         const y = this.activeBuffer.scrollBottom + 1;  // index = scrollBottom
-        this.activeBuffer.delete(y, 1, false);
+        this.activeBuffer.delete2(y, 1, false);
 
     }
 
@@ -1034,24 +1022,21 @@ export class Parser {
     deleteLine(){
 
         // 在滚动底部添加行
-        const line = this.activeBuffer.getBlankLine();
+        const line = this.activeBuffer.getBlankLine2();
 
         if(this.activeBuffer.scrollBottom === this.terminal.rows){
             // 在底部添加
-            this.activeBuffer.append(line);
-            this.append(line.element);
-            // this.viewport.appendChild(line.element);
-            // this.fragment.appendChild(line.element);
+            this.activeBuffer.append2(this.activeBuffer.getBlankBlocks(), line);
+            this.append(line);
         } else {
             // 在后一行插入前
             const y = this.activeBuffer.scrollBottom + 1; // index = scrollBottom
-            let afterNode = this.activeBuffer.insert(y, line)[0];
-            // this.viewport.insertBefore(line.element, afterNode);
-            this.insertBefore(line.element, afterNode);
+            let afterNode = this.activeBuffer.insert(y, line);
+            this.insertBefore(line, afterNode);
         }
 
         // 在光标的位置删除行
-        this.activeBuffer.delete(this.y, 1, false);
+        this.activeBuffer.delete2(this.y, 1, false);
 
     }
 
@@ -1061,24 +1046,19 @@ export class Parser {
      */
     scrollUp(){
 
-        // let d1 = new Date().getTime();
-
-        let line = this.activeBuffer.getBlankLine();
+        let line = this.activeBuffer.getBlankLine2();
 
         if(this.activeBuffer.scrollBottom === this.terminal.rows){
             // 在底部添加
-            this.activeBuffer.append(line);
-            this.append(line.element);
-            // this.fragment.appendChild(line.element);
-            // this.viewport.appendChild(line.element);
+            this.activeBuffer.append2(this.activeBuffer.getBlankBlocks(), line);
+            this.append(line);
         } else {
             // 在后一行插入前
             // 在底行添加空行
             // rows = 24, scrollBottom = 24, y = 24
             const y = this.activeBuffer.scrollBottom + 1; // index = scrollBottom
-            let afterNode = this.activeBuffer.insert(y, line)[0];
-            // this.viewport.insertBefore(line.element, afterNode);
-            this.insertBefore(line.element, afterNode);
+            let afterNode = this.activeBuffer.insert(y, line);
+            this.insertBefore(line, afterNode);
         }
 
         // 删除顶行
@@ -1086,13 +1066,18 @@ export class Parser {
 
         // 如果是缓冲区第一个是顶行的话，就保存，否则需要删除。
         const saveLines = this.activeBuffer.scrollTop === 1;
-        const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, saveLines);
-        for(let savedLine of savedLines){
-            this.printer.printLine(savedLine, false);
-        }
+        const savedLines: any = this.activeBuffer.delete2(this.activeBuffer.scrollTop, 1, saveLines);
+        // savedLines['dirties']
+        // savedLines['blocks']
+        // savedLines['elements']
 
-        // let d2 = new Date().getTime();
-        // console.info("scrollUp: d2-d1:" + (d2 - d1) + ", parent:" + parent);
+        if(savedLines['elements']){
+            let index = 0;
+            for(let element of savedLines['elements']){
+                this.printer.printLine(element, savedLines['blocks'][index], false);
+                index++;
+            }
+        }
 
     }
 
@@ -1102,27 +1087,22 @@ export class Parser {
      */
     scrollDown(){
 
-        let line = this.activeBuffer.getBlankLine();
+        let line = this.activeBuffer.getBlankLine2();
 
         // 删除底行
-        this.activeBuffer.delete(this.activeBuffer.scrollBottom, 1, false);
+        this.activeBuffer.delete2(this.activeBuffer.scrollBottom, 1, false);
 
         // 顶部添加行
-        let afterNode = this.activeBuffer.insert(this.activeBuffer.scrollTop, line)[0];
+        let afterNode = this.activeBuffer.insert(this.activeBuffer.scrollTop, line);
 
-        // this.viewport.insertBefore(line.element, afterNode);
-        this.insertBefore(line.element, afterNode);
+        this.insertBefore(line, afterNode);
 
     }
 
     /**
-     * 将fragment的内容输出
+     * 添加行
+     * @param newChild
      */
-    flush(){
-        this.viewport.appendChild(this.fragment);
-        this.fragment = document.createDocumentFragment();
-    }
-
     append(newChild: Node){
         this.viewport.appendChild(newChild);
     }
@@ -1133,7 +1113,6 @@ export class Parser {
      * @param refChild
      */
     insertBefore(newChild: Node, refChild: Node){
-        this.flush();
         this.viewport.insertBefore(newChild, refChild);
     }
 

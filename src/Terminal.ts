@@ -94,7 +94,7 @@ export class Terminal {
     readonly sshServerInfo: SSHServerInfo;
     // 终端提示符
     readonly prompt: string = "WebXterm>>> ";
-    // 发送接收器
+    // // 发送接收器
     readonly transceiver: Transceiver;
     // Worker
     // readonly sshWorker: Worker;
@@ -207,7 +207,6 @@ export class Terminal {
         this.container.appendChild(this.viewport);
         this.viewport.className = "viewport";
 
-
         // 待提交区域
         this.container.appendChild(this.presentation);
         this.presentation.className = "presentation";
@@ -306,7 +305,7 @@ export class Terminal {
         this.bufferSet.init(this.rows, this.columns);
         this.addBufferFillRows();
         // 第一行设置为已被使用。
-        this.bufferSet.activeBufferLine.used = true;
+        // this.bufferSet.activeBufferLine.used = true;
         // 设置最大滚动行数
         this.bufferSet.normal.maxScrollBack = this.preferences.scrollBack;
 
@@ -357,15 +356,15 @@ export class Terminal {
     resizeRemote() {
 
         // 设置宽度
-        if (this.transceiver) {
-
-            this.transceiver.send(JSON.stringify({
-                size: {
-                    w: this.columns,
-                    h: this.rows
-                }
-            }));
-        }
+        // if (this.transceiver) {
+        //
+        //     this.transceiver.send(JSON.stringify({
+        //         size: {
+        //             w: this.columns,
+        //             h: this.rows
+        //         }
+        //     }));
+        // }
     }
 
     /**
@@ -486,12 +485,17 @@ export class Terminal {
         //     switch (data["type"]) {
         //         case "socket":
         //             break;
+        //         case "data":
+        //             this.sshWorker.postMessage({
+        //                 "type": "get"
+        //             });
+        //             break;
         //         case "get":
         //             this.messageQueue.push(data["data"]);
         //             this.startPrinter();
         //             break;
         //         case "sshVersion":
-        //             console.info("ssh version is " + data["data"]);
+        //             console.info("ssh version is ", data["data"]);
         //             break;
         //     }
         //
@@ -531,14 +535,15 @@ export class Terminal {
     /**
      * 打印文本
      * @param text
+     * @param callback
      */
-    echo(text: string) {
+    echo(text: string, callback: Function | undefined = undefined) {
         if (!this.isReady) {
             setTimeout(() => {
-                this.parser.parse(text);
+                this.parser.parse(text, callback);
             }, 1000);
         } else {
-            this.parser.parse(text);
+            this.parser.parse(text, callback);
         }
     }
 
@@ -560,30 +565,24 @@ export class Terminal {
             return;
         }
 
-        // let waiting = false;
-
         this.messageQueueTimer = setInterval(() => {
+
+            clearInterval(this.messageQueueTimer);
+            this.messageQueueTimer = 0;
 
             // 如果终端没有就绪的话，就不要输出。
             if(!this.isReady){
-                clearInterval(this.messageQueueTimer);
-                this.messageQueueTimer = 0;
                 return;
             }
-
             const len = this.messageQueue.length;
-            if(len == 0) {
-                clearInterval(this.messageQueueTimer);
-                this.messageQueueTimer = 0;
-            } else {
-                // if(waiting){
-                //     console.info("waiting...", len);
-                //     return;
-                // }
-                // waiting = true;
+            if(len > 0) {
                 const chunk = this.messageQueue.splice(0, len);
-                this.echo(chunk.join(""));
-                // waiting = false;
+                this.echo(chunk.join(""), () => {
+                    // this.sshWorker.postMessage({
+                    //     "type": "get"
+                    // });
+                    this.startPrinter();
+                });
             }
 
         }, 0);
@@ -671,7 +670,7 @@ export class Terminal {
         let fragment = document.createDocumentFragment();
         const lines = this.bufferSet.activeBuffer.lines;
         for (let i = 0, len = lines.length; i < len; i++) {
-            fragment.appendChild(lines[i].element);
+            fragment.appendChild(lines[i]);
         }
         this.viewport.appendChild(fragment);
     }
@@ -683,8 +682,8 @@ export class Terminal {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 // 按了回车键
-                if (this.transceiver)
-                    this.transceiver.send(JSON.stringify({cmd: '\x0d'}));
+                // if (this.transceiver)
+                //     this.transceiver.send(JSON.stringify({cmd: '\x0d'}));
             }
             e.stopPropagation();
             e.preventDefault();

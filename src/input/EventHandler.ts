@@ -587,51 +587,51 @@ export class EventHandler {
 
     }
 
-    paste(data: string, clipboard: string, terminal: Terminal) {
-        if(!!data && terminal.transceiver){
-
-            if(!(terminal.parser.applicationKeypad
-                || terminal.esParser.applicationCursorKeys
-                || terminal.bufferSet.isAlt)){
-                // 这三种情况不记录日志
-                if(data === "\x0d"){
-                    // 回车新增一行
-                    // terminal.eventLog.append("[Enter]");
-                    terminal.eventLog.add();
-                } else {
-                    terminal.eventLog.append(data);
-                }
-
-            }
-
-            terminal.transceiver.send(JSON.stringify({
-                "cmd": data
-            }));
-        } else if(!terminal.transceiver || !terminal.transceiver.connected){
-            // 没有连接到终端。
-            console.info("clipboard.keySym:" + data);
-
-            switch (data) {
-                case "\x0d":
-                    terminal.echo( "\r\n" + terminal.prompt);
-                    break;
-                case "\x7f":
-                    if(terminal.bufferSet.activeBuffer.x >= terminal.prompt.length){
-                        terminal.echo("\x08\x1b[P");
-                    } else {
-                        terminal.echo("\x07");
-                    }
-                    break;
-                case "\x1b[A":
-                case "\x1b[B":
-                    terminal.echo("\x07");
-                    break;
-                default:
-                    terminal.echo(data);
-            }
-
-        }
-    }
+    // paste(data: string, clipboard: string, terminal: Terminal) {
+    //     if(!!data && terminal.transceiver){
+    //
+    //         if(!(terminal.parser.applicationKeypad
+    //             || terminal.esParser.applicationCursorKeys
+    //             || terminal.bufferSet.isAlt)){
+    //             // 这三种情况不记录日志
+    //             if(data === "\x0d"){
+    //                 // 回车新增一行
+    //                 // terminal.eventLog.append("[Enter]");
+    //                 terminal.eventLog.add();
+    //             } else {
+    //                 terminal.eventLog.append(data);
+    //             }
+    //
+    //         }
+    //
+    //         terminal.transceiver.send(JSON.stringify({
+    //             "cmd": data
+    //         }));
+    //     } else if(!terminal.transceiver || !terminal.transceiver.connected){
+    //         // 没有连接到终端。
+    //         console.info("clipboard.keySym:" + data);
+    //
+    //         switch (data) {
+    //             case "\x0d":
+    //                 terminal.echo( "\r\n" + terminal.prompt);
+    //                 break;
+    //             case "\x7f":
+    //                 if(terminal.bufferSet.activeBuffer.x >= terminal.prompt.length){
+    //                     terminal.echo("\x08\x1b[P");
+    //                 } else {
+    //                     terminal.echo("\x07");
+    //                 }
+    //                 break;
+    //             case "\x1b[A":
+    //             case "\x1b[B":
+    //                 terminal.echo("\x07");
+    //                 break;
+    //             default:
+    //                 terminal.echo(data);
+    //         }
+    //
+    //     }
+    // }
 
     sendMessage(terminal: Terminal, data: object){
         terminal.transceiver.send(JSON.stringify(data));

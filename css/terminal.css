@@ -113,6 +113,7 @@ html, body {
 .webxterm .viewport {
     word-break: break-all;
     padding: 0 4px;
+    white-space: pre;
 }
 
 .webxterm .viewport-row {
@@ -125,14 +126,19 @@ html, body {
     overflow: hidden;
 }
 
-.webxterm .viewport-row .len2 {
+.webxterm .viewport .len2 {
     display: inline-block;
     overflow: hidden;
     vertical-align: bottom;
 }
 
-.webxterm .viewport-row .tab {
+.webxterm .viewport .tab {
     white-space: pre;
+}
+
+.webxterm .normal-screen-buffer.buffer-hidden,
+.webxterm .alt-screen-buffer.buffer-hidden {
+    display: none !important;
 }
 
 .webxterm .cursor {

@@ -22,7 +22,10 @@ export class Cursor {
     private _cursorShape: string = "";
 
     // 光标的内容
-    private _value: string = "";
+    private _value: string = " ";
+
+    // 是否为默认值
+    private defaultValue: boolean = true;
 
     // 光标元素
     private element = document.createElement("span");
@@ -49,7 +52,6 @@ export class Cursor {
         this.outlineElement.className = "outline";
 
         this.instanceId = instanceId;
-        this.value = "&nbsp;";
         this.element.appendChild(this.contentElement);
         this.element.appendChild(this.outlineElement);
 
@@ -243,7 +245,10 @@ export class Cursor {
 
     set value(value: string) {
         if (value.length == 0) {
-            value = "&nbsp;";
+            value = " ";
+            this.defaultValue = true;
+        } else {
+            this.defaultValue = false;
         }
         this._value = value;
     }
@@ -292,16 +297,31 @@ export class Cursor {
         return this.element;
     }
 
+
+
     /**
      * 最终生成的html
      */
     get html(): string {
 
-        // let oldCursor = document.getElementById(this.id);
-        // if (oldCursor) {
-        //     console.info("oldCursor。remove..." + this.id);
-        //     oldCursor.remove();
-        // }
+        let oldCursor = document.getElementById(this.id);
+        if (oldCursor) {
+            // console.info("oldCursor。remove..." + this.id);
+            // oldCursor.remove();
+            if(oldCursor.parentElement){
+                let newNode,
+                    extraClass = oldCursor.getAttribute("data-extra-class"),
+                    value = oldCursor.getAttribute("data-value") || "";
+                if(!!extraClass){
+                    newNode = document.createElement("span");
+                    newNode.innerHTML = value;
+                    newNode.className = extraClass;
+                } else {
+                    newNode = document.createTextNode(value);
+                }
+                oldCursor.parentElement.replaceChild(newNode, oldCursor);
+            }
+        }
 
         this.version++;
 
@@ -311,13 +331,15 @@ export class Cursor {
             // element.innerHTML = this.value;
             // element.className = this._extraClass;
             // return element.outerHTML;
-            return `<span id="${this.id}" class="${this._extraClass}">${this.value}</span>`;
+            return `<span id="${this.id}" class="${this._extraClass}" data-extra-class="${this._extraClass}" data-value="${this.value}">${this.value}</span>`;
         }
 
         this.element.id = this.id;
 
         this.contentElement.innerHTML = this.value;
         CommonUtils.addClass(this.element, this._extraClass);
+        this.element.setAttribute("data-extra-class", this._extraClass);
+        this.element.setAttribute("data-value", this.value);
 
         return this.element.outerHTML;
     }
