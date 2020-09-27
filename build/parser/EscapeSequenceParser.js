@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const DataBlock_1 = require("../buffer/DataBlock");
+const Terminal_1 = require("../Terminal");
 const DataBlockAttribute_1 = require("../buffer/DataBlockAttribute");
 const Preferences_1 = require("../Preferences");
 const Styles_1 = require("../Styles");
@@ -45,7 +45,6 @@ class EscapeSequenceParser {
         this._attribute = new DataBlockAttribute_1.DataBlockAttribute();
         this._applicationCursorKeys = false;
         this._normalCursorKeys = true;
-        this._replaceMode = true;
         this._insertMode = false;
         this.cursorBlinking = false;
         this.parser = parser;
@@ -64,14 +63,8 @@ class EscapeSequenceParser {
     get normalCursorKeys() {
         return this._normalCursorKeys;
     }
-    get replaceMode() {
-        return this._replaceMode;
-    }
     get insertMode() {
         return this._insertMode;
-    }
-    get activeBufferLine() {
-        return this.parser.bufferSet.activeBufferLine;
     }
     get activeBuffer() {
         return this.parser.bufferSet.activeBuffer;
@@ -372,7 +365,7 @@ class EscapeSequenceParser {
         }
         else {
             for (let i = 0; i < ps; i++) {
-                this.activeBufferLine.insert(this.parser.x, DataBlock_1.DataBlock.newBlock(" ", this.attribute));
+                this.activeBuffer.replace(this.parser.y - 1, this.parser.x - 1, 1, this.attribute, " ");
             }
         }
     }
@@ -420,12 +413,12 @@ class EscapeSequenceParser {
     cursorForwardTabulation(params) {
         const ps = params[0] || 1;
         for (let i = 0; i < ps; i++) {
-            this.activeBufferLine.replace(this.parser.x, DataBlock_1.DataBlock.newBlock("\t", this.attribute));
+            this.activeBuffer.replace(this.parser.y - 1, this.parser.x - 1, 1, this.attribute, "\t");
             this.parser.x++;
         }
     }
     eraseInDisplay(params, isDECS) {
-        let begin = 1, end, scrollBack = false, fragment = document.createDocumentFragment();
+        let begin = 1, end, scrollBack = false;
         switch (params[0]) {
             case 1:
                 end = this.parser.y;
@@ -445,26 +438,36 @@ class EscapeSequenceParser {
         if (begin == 1 && end == this.terminal.rows) {
             scrollBack = this.parser.bufferSet.isNormal;
         }
+        let updateScrollViewHeight = false;
+        console.info("高水位：" + this.activeBuffer.high_water);
         for (let y = begin; y <= end; y++) {
+            if (y > this.activeBuffer.high_water) {
+                break;
+            }
             if (scrollBack) {
-                const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, scrollBack);
-                for (let savedLine of savedLines) {
-                    this.terminal.printer.printLine(savedLine, false);
+                this.activeBuffer.removeLine(this.activeBuffer.scrollTop - 1, 1, scrollBack);
+                if (this.terminal.renderType === Terminal_1.RenderType.CANVAS) {
+                    if (y !== this.activeBuffer.y)
+                        if (this.terminal.textRenderer)
+                            this.terminal.textRenderer.clearLine(y);
+                    this.activeBuffer.insertLine(this.activeBuffer.scrollBottom - 1, 1);
+                    if (!updateScrollViewHeight)
+                        updateScrollViewHeight = true;
                 }
-                let line = this.activeBuffer.getBlankLine();
-                this.activeBuffer.append(line);
-                fragment.appendChild(line.element);
+                else {
+                }
             }
             else {
-                const line = this.activeBuffer.get(y);
-                line.erase(this.attribute);
+                this.activeBuffer.eraseLine(y, this.attribute);
             }
         }
-        if (scrollBack)
-            this.parser.viewport.appendChild(fragment);
+        this.activeBuffer.resetHighWater();
+        if (updateScrollViewHeight) {
+            this.terminal.updateScrollAreaHeight();
+        }
     }
     eraseInLine(params, isDECS) {
-        let begin = 1, end, blockSize = this.activeBufferLine.blocks.length;
+        let begin = 1, end, blockSize = this.activeBuffer.size;
         switch (params[0]) {
             case 1:
                 end = this.parser.x;
@@ -477,9 +480,8 @@ class EscapeSequenceParser {
                 end = blockSize;
                 break;
         }
-        for (let i = begin, block; i <= end; i++) {
-            block = this.activeBufferLine.get(i);
-            block.erase(" ", this.attribute);
+        for (let i = begin; i <= end; i++) {
+            this.activeBuffer.erase(this.parser.y - 1, i - 1, this.attribute);
         }
     }
     insertLines(params) {
@@ -496,7 +498,7 @@ class EscapeSequenceParser {
     }
     deleteChars(params) {
         const ps = params[0] || 1;
-        this.activeBufferLine.delete(this.parser.x, ps);
+        this.activeBuffer.remove(this.parser.y - 1, this.parser.x - 1, ps);
     }
     setOrRequestGraphicsAttr(params) {
         let [pi, pa, pv] = params;
@@ -523,9 +525,7 @@ class EscapeSequenceParser {
     eraseChars(params) {
         const ps = params[0] || 1;
         for (let i = this.parser.x, len = this.parser.x + ps; i < len; i++) {
-            let block = this.activeBufferLine.get(i);
-            if (block)
-                block.erase(" ", this.attribute);
+            this.activeBuffer.erase(this.parser.y - 1, i - 1, this.attribute);
         }
     }
     cursorBackwardTabulation(params) {
@@ -701,7 +701,6 @@ class EscapeSequenceParser {
                     break;
                 case 4:
                     this._insertMode = true;
-                    this._replaceMode = false;
                     break;
                 case 12:
                     break;
@@ -867,7 +866,6 @@ class EscapeSequenceParser {
                     break;
                 case 4:
                     this._insertMode = false;
-                    this._replaceMode = true;
                     break;
                 case 12:
                     break;
@@ -933,10 +931,10 @@ class EscapeSequenceParser {
             return;
         switch (params) {
             case 0:
-                this._attribute = new DataBlockAttribute_1.DataBlockAttribute();
+                this._attribute.reset();
                 break;
             case 1:
-                this._attribute.bold = true;
+                this._attribute.bold = DataBlockAttribute_1.ATTR_MODE_BOLD;
                 if (this.preferences.showBoldTextInBrightColor) {
                     if (!!this.attribute.colorClass) {
                         const index = Preferences_1.Preferences.paletteColorNames.indexOf(this.attribute.colorClass);
@@ -945,56 +943,52 @@ class EscapeSequenceParser {
                 }
                 break;
             case 2:
-                this._attribute.faint = true;
+                this._attribute.faint = DataBlockAttribute_1.ATTR_MODE_FAINT;
                 break;
             case 3:
-                this._attribute.italic = true;
+                this._attribute.italic = DataBlockAttribute_1.ATTR_MODE_ITALIC;
                 break;
             case 4:
-                this._attribute.underline = true;
+                this._attribute.underline = DataBlockAttribute_1.ATTR_MODE_UNDERLINE;
                 break;
             case 5:
-                this._attribute.slowBlink = true;
+                this._attribute.slowBlink = DataBlockAttribute_1.ATTR_MODE_SLOW_BLINK;
                 break;
             case 6:
-                this._attribute.rapidBlink = true;
                 break;
             case 7:
-                this._attribute.inverse = true;
+                this._attribute.inverse = DataBlockAttribute_1.ATTR_MODE_INVERSE;
                 break;
             case 8:
-                this._attribute.invisible = true;
+                this._attribute.invisible = DataBlockAttribute_1.ATTR_MODE_INVISIBLE;
                 break;
             case 9:
-                this._attribute.crossedOut = true;
                 break;
             case 21:
-                this._attribute.bold = false;
+                this._attribute.bold = DataBlockAttribute_1.ATTR_MODE_NONE;
                 break;
             case 22:
-                this._attribute.bold = false;
-                this._attribute.faint = false;
+                this._attribute.bold = DataBlockAttribute_1.ATTR_MODE_NONE;
+                this._attribute.faint = DataBlockAttribute_1.ATTR_MODE_NONE;
                 break;
             case 23:
-                this._attribute.italic = false;
+                this._attribute.italic = DataBlockAttribute_1.ATTR_MODE_NONE;
                 break;
             case 24:
-                this._attribute.underline = false;
+                this._attribute.underline = DataBlockAttribute_1.ATTR_MODE_NONE;
                 break;
             case 25:
-                this._attribute.slowBlink = false;
+                this._attribute.slowBlink = DataBlockAttribute_1.ATTR_MODE_NONE;
                 break;
             case 26:
-                this._attribute.rapidBlink = false;
                 break;
             case 27:
-                this._attribute.inverse = false;
+                this._attribute.inverse = DataBlockAttribute_1.ATTR_MODE_NONE;
                 break;
             case 28:
-                this._attribute.invisible = false;
+                this._attribute.invisible = DataBlockAttribute_1.ATTR_MODE_NONE;
                 break;
             case 29:
-                this._attribute.crossedOut = false;
                 break;
             case 38:
                 this.customColorMode = params;

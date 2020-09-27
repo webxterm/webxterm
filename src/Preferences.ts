@@ -166,6 +166,7 @@ export class Preferences {
 
     // 调色板方案
     private _paletteScheme: string = "";
+    private _paletteMap: {[name: string]: string} = {};
 
     ////////////////// 终端 ////////////////
     // 终端类型
@@ -195,6 +196,18 @@ export class Preferences {
     // 是否含有滚动条
     private _scrollbar: boolean = false;
 
+    // 倍数
+    private _canvasSizeMultiple: number = 2;
+
+    // 选中颜色，如果是空的话，则代表跟随系统颜色、
+    private _selectionColor: string = "";
+
+    // 选中文本颜色，如果是空的话，则代表跟随系统颜色、
+    private _selectionTextColor: string = "";
+
+    // 和下一次的刷新间隔(ms)
+    private _flushInterval: number = 0;
+
     readonly instanceId: string;
 
     private terminal: Terminal;
@@ -209,7 +222,7 @@ export class Preferences {
      */
     init(): void {
 
-        this.colorScheme = "Custom";
+        this.colorScheme = "Solarized light";
         this.boldColor = "#FF6666";
         this.highlightColor = "#FFFFFF";
         this.highlightBackgroundColor = "#000000";
@@ -221,7 +234,7 @@ export class Preferences {
 
         this.cursorColor = "red";
         this.cursorBackgroundColor = "#FF6666";
-        this.defaultCursorColor = true;
+        this.defaultCursorColor = false;
         this.cursorBlinking = true;
 
         // this.backgroundImage = "../images/default-background.png";
@@ -233,7 +246,7 @@ export class Preferences {
         this.fontSize = Preferences.defaultFontSize;
 
         this.showBoldTextInBrightColor = true;
-        this.paletteScheme = "Linux console";
+        this.paletteScheme = "XTerm";
 
         this.scrollToBottomOnInput = true;
 
@@ -241,14 +254,15 @@ export class Preferences {
         this.visualBellColor = "rgba(0,0,0,0.5)";
 
         // this.terminalType = "vt100";
-        this.terminalType = "linux";
+        // this.terminalType = "linux";
+        this.terminalType = "xterm";
 
         // https://invisible-island.net/xterm/manpage/xterm.html#VT100-Widget-Resources:saveLines
         // saveLines (class SaveLines)
         //                Specifies the number of lines to save beyond the top of the
         //                screen when a scrollbar is turned on.  The default is "1024".
-        // max = 9999 lines
-        this.scrollBack = 9999;
+        // max = 10240 lines
+        this.scrollBack = 10240;
 
         // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
         this.tabSize = 8;  // 默认是8
@@ -259,6 +273,11 @@ export class Preferences {
         this.nextHeartbeatSeconds = 10;
         // 默认含有滚动条
         this.scrollbar = true;
+
+        // 选中颜色，默认为""， 跟随系统颜色。
+        this._selectionColor = "";
+        // 选中文本颜色，默认为""，跟随系统颜色。
+        this.selectionTextColor = "";
     }
 
     getFonts(): Font[] {
@@ -679,8 +698,10 @@ export class Preferences {
         }, this.instanceId);
 
         // 获取字符的尺寸
-        if (this.terminal.init)
+        if (this.terminal.init){
             this.terminal.measure();
+            // if(this.terminal.printer.canvasRenderer.ready) this.terminal.printer.canvasRenderer.updateFontSize();
+        }
     }
 
     get showBoldTextInBrightColor(): boolean {
@@ -689,6 +710,10 @@ export class Preferences {
 
     set showBoldTextInBrightColor(value: boolean) {
         this._showBoldTextInBrightColor = value;
+    }
+
+    get paletteMap(): {[name: string]: string} {
+        return this._paletteMap;
     }
 
     get paletteScheme(): string {
@@ -705,6 +730,9 @@ export class Preferences {
             const colorName = Preferences.paletteColorNames[i];
             // color
             const color = Color.parseColor(colors[i]);
+
+            this._paletteMap[colorName] = colors[i];
+            this._paletteMap['_' + colorName] = colors[i];
 
             Styles.add("." + colorName, {
                 color: color + " !important"
@@ -875,5 +903,40 @@ export class Preferences {
                 "overflow-y": "scroll"
             }, this.terminal.instanceId)
         }
+    }
+
+
+    get canvasSizeMultiple(): number {
+        return this._canvasSizeMultiple;
+    }
+
+    set canvasSizeMultiple(value: number) {
+        this._canvasSizeMultiple = value;
+    }
+
+
+    get selectionColor(): string {
+        return this._selectionColor;
+    }
+
+    set selectionColor(value: string) {
+        this._selectionColor = value;
+    }
+
+
+    get selectionTextColor(): string {
+        return this._selectionTextColor;
+    }
+
+    set selectionTextColor(value: string) {
+        this._selectionTextColor = value;
+    }
+
+    get flushInterval(): number {
+        return this._flushInterval;
+    }
+
+    set flushInterval(value: number) {
+        this._flushInterval = value;
     }
 }

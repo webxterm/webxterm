@@ -1,0 +1,375 @@
+import {ATTR_MODE_NONE, DataBlockAttribute} from "./DataBlockAttribute";
+
+
+/**
+ * 可变Int8Array
+ */
+class VarInt8Array{
+
+    /**
+     * 将传入的参数合并到数组中
+     * @param arr
+     * @param items
+     */
+    static push(arr: Int8Array, items: Int8Array): Int8Array{
+        const tmpArr = Array.from(arr);
+        tmpArr.push(...items);
+        return Int8Array.from(tmpArr);
+    }
+
+    /**
+     * 删除某一个元素
+     * @param arr
+     * @param start
+     * @param deleteCount
+     */
+    static remove(arr: Int8Array, start: number, deleteCount: number): Int8Array{
+        const tmpArr = Array.from(arr);
+        tmpArr.splice(start, deleteCount);
+        return Int8Array.from(tmpArr);
+    }
+
+}
+
+/**
+ * 行缓冲区
+ */
+export class LineBuffer {
+
+    private readonly _init_line_size: number = 0;   // 初始化行数
+
+    private _lines: string[][];                 // 缓冲区的所有行
+    private _line_char_widths: Int8Array[];     // 字符显示宽度，默认是1，可选值为1，2，3，4...127？
+    private _line_attrs: Int8Array[];           // 行属性, 最小是0，最大为127
+    private _line_colors: string[][];           // 字符前景颜色
+    private _line_bg_colors: string[][];        // 字符背景颜色
+    private _line_soft_wraps: number[];         // 软换行, 0: 硬换行，1:软换行
+    // private _pos: number;    // 当前的最大值，针对push方式
+
+    constructor(init_line_size: number = 0) {
+        this._init_line_size = init_line_size;
+        this._lines = new Array(init_line_size);
+        this._line_char_widths = new Array(init_line_size);
+        this._line_attrs = new Array(init_line_size);
+        this._line_colors = new Array(init_line_size);
+        this._line_bg_colors = new Array(init_line_size);
+        this._line_soft_wraps = new Array(init_line_size);
+        // this._pos = 0;
+    }
+
+    /**
+     * 重置
+     */
+    reset(){
+        this._lines = new Array(this._init_line_size);
+        this._line_char_widths = new Array(this._init_line_size);
+        this._line_attrs = new Array(this._init_line_size);
+        this._line_colors = new Array(this._init_line_size);
+        this._line_bg_colors = new Array(this._init_line_size);
+        this._line_soft_wraps = new Array(this._init_line_size);
+    }
+
+    get lines(): string[][] {
+        return this._lines;
+    }
+
+    get line_char_widths(): Int8Array[]{
+        return this._line_char_widths;
+    }
+
+    get line_attrs(): Int8Array[] {
+        return this._line_attrs;
+    }
+
+    get line_colors(): string[][] {
+        return this._line_colors;
+    }
+
+    get line_bg_colors(): string[][] {
+        return this._line_bg_colors;
+    }
+
+    get line_soft_wraps(): number[] {
+        return this._line_soft_wraps;
+    }
+
+// get pos(): number {
+    //     return this._pos;
+    // }
+
+    get init_line_size(): number {
+        return this._init_line_size;
+    }
+
+    // plusPos(value: number) {
+    //     this._pos += value;
+    // }
+
+    newItems<T>(initVal: T, columns: number = 0): T[] {
+        return Array.from({length: columns}, ()=> initVal);
+    }
+
+    newByteItems(initVal: number = 0, columns: number = 0){
+        if(initVal == 0) return new Int8Array(columns);
+        return Int8Array.from({length: columns}, () => initVal);
+    }
+
+    //////////////////////////////////////////////////////////////////////////
+    // 列
+    //////////////////////////////////////////////////////////////////////////
+
+    /**
+     * 替换某一个块
+     * @param yIndex
+     * @param xIndex
+     * @param charWidth
+     * @param dataAttr
+     * @param data
+     */
+    replace(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, data: string): void{
+        this.checkLine(yIndex);
+
+        this._lines[yIndex][xIndex] = data;
+        this._line_attrs[yIndex][xIndex] = dataAttr.sum;
+        this._line_char_widths[yIndex][xIndex] = charWidth;
+        this._line_colors[yIndex][xIndex] = dataAttr.colorClass;
+        this._line_bg_colors[yIndex][xIndex] = dataAttr.backgroundColorClass;
+    }
+
+    // /**
+    //  * 插入一个快
+    //  * @param yIndex
+    //  * @param xIndex
+    //  * @param charWidth
+    //  * @param dataAttr
+    //  * @param data
+    //  */
+    // insert(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, data: string): void{
+    //     if(this._lines[yIndex]) this._lines[yIndex].splice(xIndex, 0, data);
+    //     if(this._line_attrs[yIndex]) this._line_attrs[yIndex].splice(xIndex, 0, dataAttr.sum);
+    //     if(this._line_char_widths[yIndex]) this._line_char_widths[yIndex].splice(xIndex, 0, charWidth);
+    //     if(this._line_colors[yIndex]) this._line_colors[yIndex].splice(xIndex, 0, dataAttr.colorClass);
+    //     if(this._line_bg_colors[yIndex]) this._line_bg_colors[yIndex].splice(xIndex, 0, dataAttr.backgroundColorClass)
+    // }
+
+    /**
+     * 追加一个块
+     * @param yIndex
+     * @param count
+     * @param charWidth
+     */
+    append(yIndex: number, count: number, charWidth: number = 1): void{
+        this.checkLine(yIndex);
+
+        this._lines[yIndex].push(...this.newItems(" ", count));
+        // this._line_attrs[yIndex].push(...this.newByteItems(ATTR_MODE_NONE, count));
+        // this._line_char_widths[yIndex].push(...this.newByteItems(charWidth, count));
+        this._line_attrs[yIndex] = VarInt8Array.push(this._line_attrs[yIndex], this.newByteItems(ATTR_MODE_NONE, count));
+        this._line_char_widths[yIndex] = VarInt8Array.push(this._line_char_widths[yIndex], this.newByteItems(charWidth, count));
+
+        this._line_colors[yIndex].push(...this.newItems("", count));
+        this._line_bg_colors[yIndex].push(...this.newItems("", count));
+    }
+
+    /**
+     * 移除一个块
+     * @param yIndex
+     * @param start
+     * @param deleteCount
+     */
+    remove(yIndex: number, start: number, deleteCount: number): void{
+        this.checkLine(yIndex);
+
+        this._lines[yIndex].splice(start, deleteCount);
+        // this._line_attrs[yIndex].splice(start, deleteCount);
+        // this._line_char_widths[yIndex].splice(start, deleteCount);
+        this._line_attrs[yIndex] = VarInt8Array.remove(this._line_attrs[yIndex], start, deleteCount);
+        this._line_char_widths[yIndex] = VarInt8Array.remove(this._line_char_widths[yIndex], start, deleteCount);
+
+        this._line_colors[yIndex].splice(start, deleteCount);
+        this._line_bg_colors[yIndex].splice(start, deleteCount);
+    }
+
+    /**
+     * 检查行是否存在
+     * @param yIndex
+     */
+    checkLine(yIndex: number){
+        if(!this._lines[yIndex]) throw new Error("LineBuffer._lines: rownum="+yIndex+" is not exists");
+        if(!this._line_attrs[yIndex]) throw new Error("LineBuffer._line_attrs: rownum="+yIndex+" is not exists");
+        if(!this._line_char_widths[yIndex]) throw new Error("LineBuffer._line_char_widths: rownum="+yIndex+" is not exists");
+        if(!this._line_colors[yIndex]) throw new Error("LineBuffer._line_colors: rownum="+yIndex+" is not exists");
+        if(!this._line_bg_colors[yIndex]) throw new Error("LineBuffer._line_bg_colors: rownum="+yIndex+" is not exists");
+    }
+
+
+    //////////////////////////////////////////////////////////////////////////
+    // 行
+    //////////////////////////////////////////////////////////////////////////
+
+    /**
+     * 插入一行（空行）
+     * @param start
+     * @param columns
+     * @param charWidth
+     */
+    insertLine(start: number, columns: number, charWidth: number = 1): void{
+        this._lines.splice(start, 0, this.newItems(" ", columns));
+        this._line_attrs.splice(start, 0, this.newByteItems(ATTR_MODE_NONE, columns));
+        this._line_char_widths.splice(start, 0, this.newByteItems(charWidth, columns));
+        this._line_colors.splice(start, 0, this.newItems("", columns));
+        this._line_bg_colors.splice(start, 0, this.newItems("", columns));
+    }
+
+    /**
+     * 追加一行（空行）
+     * @param columns
+     * @param charWidth
+     */
+    appendLine(columns: number, charWidth: number = 1): void{
+        this._lines.push(this.newItems(" ", columns));
+        this._line_attrs.push(this.newByteItems(ATTR_MODE_NONE, columns));
+        this._line_char_widths.push(this.newByteItems(charWidth, columns));
+        this._line_colors.push(this.newItems("", columns));
+        this._line_bg_colors.push(this.newItems("", columns));
+    }
+
+    // /**
+    //  * 替换或附加一行
+    //  * @param columns
+    //  * @param charWidth
+    //  */
+    // appendLine(columns: number, charWidth: number = 1): void{
+    //     if(this._pos >= this._init_line_size){
+    //         this.pushLine(columns, charWidth);
+    //     } else {
+    //         this.replaceLine(this._pos, columns, charWidth);
+    //     }
+    //     this._pos++;
+    //
+    // }
+
+    /**
+     * 替换一行（空行）
+     * @param yIndex
+     * @param columns
+     * @param charWidth
+     */
+    replaceLine(yIndex: number, columns: number, charWidth: number = 1): void{
+        this._lines[yIndex] = this.newItems(" ", columns);
+        this._line_attrs[yIndex] = this.newByteItems(ATTR_MODE_NONE, columns);
+        this._line_char_widths[yIndex] = this.newByteItems(charWidth, columns);
+        this._line_colors[yIndex] = this.newItems("", columns);
+        this._line_bg_colors[yIndex] = this.newItems("", columns);
+    }
+
+    /**
+     * 移除一行
+     * @param start
+     * @param deleteCount
+     */
+    removeLine(start: number, deleteCount: number): void {
+        this._lines.splice(start, deleteCount);
+        this._line_attrs.splice(start, deleteCount);
+        this._line_char_widths.splice(start, deleteCount);
+        this._line_colors.splice(start, deleteCount);
+        this._line_bg_colors.splice(start, deleteCount);
+    }
+
+    /**
+     * 将行移动到保留区
+     * @param to
+     * @param start
+     * @param deleteCount
+     */
+    moveLine(to: LineBuffer, start: number, deleteCount: number): void {
+
+        // const a1 = this._lines.splice(start, deleteCount)
+        //     , a2 = this._line_attrs.splice(start, deleteCount)
+        //     , a3 = this._line_char_widths.splice(start, deleteCount)
+        //     , a4 = this._line_colors.splice(start, deleteCount)
+        //     , a5 = this._line_bg_colors.splice(start, deleteCount);
+        //
+        // if(to.pos >= to.init_line_size){
+        //     to.lines.push(...a1);
+        //     to.line_attrs.push(...a2);
+        //     to.line_char_widths.push(...a3);
+        //     to.line_bg_colors.push(...a4);
+        //     to.line_colors.push(...a5);
+        // } else {
+        //     // replace
+        //     LineBuffer.updateLine(to.lines, a1, to.pos);
+        //     LineBuffer.updateLine(to.line_attrs, a2, to.pos);
+        //     LineBuffer.updateLine(to.line_char_widths, a3, to.pos);
+        //     LineBuffer.updateLine(to.line_colors, a4, to.pos);
+        //     LineBuffer.updateLine(to.line_bg_colors, a5, to.pos);
+        // }
+        //
+        // to.plusPos(a1.length);
+        to.lines.push(...this._lines.splice(start, deleteCount));
+        to.line_attrs.push(...this._line_attrs.splice(start, deleteCount));
+        to.line_char_widths.push(...this._line_char_widths.splice(start, deleteCount));
+        to.line_colors.push(...this._line_colors.splice(start, deleteCount));
+        to.line_bg_colors.push(...this._line_bg_colors.splice(start, deleteCount));
+
+    }
+
+    /**
+     * 移动所有行
+     * @param to
+     */
+    moveAllLine(to: LineBuffer){
+       this.moveLine(to, 0, this._lines.length);
+    }
+
+    /**
+     * 复制行到指定的LineBuffer中
+     * @param from
+     * @param start 索引
+     * @param end 索引不包括end
+     */
+    copyFrom(from: LineBuffer, start: number, end: number): void{
+
+        // const a1 = from.lines.slice(start, end)
+        //     , a2 = from.line_attrs.slice(start, end)
+        //     , a3 = from.line_char_widths.slice(start, end)
+        //     , a4 = from.line_colors.slice(start, end)
+        //     , a5 = from.line_bg_colors.slice(start, end);
+        //
+        // if(this._pos >= this.init_line_size){
+        //     this._lines.push(...a1);
+        //     this._line_attrs.push(...a2);
+        //     this._line_char_widths.push(...a3);
+        //     this._line_bg_colors.push(...a4);
+        //     this._line_colors.push(...a5);
+        // } else {
+        //     // replace
+        //     LineBuffer.updateLine(this._lines, a1, this._pos);
+        //     LineBuffer.updateLine(this._line_attrs, a2, this._pos);
+        //     LineBuffer.updateLine(this._line_char_widths, a3, this._pos);
+        //     LineBuffer.updateLine(this._line_colors, a4, this._pos);
+        //     LineBuffer.updateLine(this._line_bg_colors, a5, this._pos);
+        // }
+        //
+        // this._pos += a1.length;
+
+        this._lines.push(...from._lines.slice(start, end));
+        this._line_attrs.push(...from._line_attrs.slice(start, end));
+        this._line_char_widths.push(...from._line_char_widths.slice(start, end));
+        this._line_bg_colors.push(...from._line_bg_colors.slice(start, end));
+        this._line_colors.push(...from._line_colors.slice(start, end));
+    }
+
+    // /**
+    //  * 更新行
+    //  * @param sArray
+    //  * @param dArray
+    //  * @param pos
+    //  */
+    // static updateLine<T>(sArray: T[], dArray: T[], pos: number): void{
+    //     for(let i = 0, len = dArray.length; i < len; i++) {
+    //         sArray[pos + i] = dArray[i];
+    //     }
+    // }
+
+}

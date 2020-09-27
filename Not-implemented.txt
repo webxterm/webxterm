@@ -1,0 +1,2 @@
+1,IRM, EscapeSequenceParser.insertMode
+\x1b[4h & \x1b[4l

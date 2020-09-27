@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style>
+        @font-face {
+            font-family: 'DejaVu Sans Mono';
+            src: url('../css/font/gnu-free/FreeMono.ttf');
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <div style="width: 600px; height: 400px; position:relative;">
+        <span style="font-size: 10pt; font-family: 'DejaVu Sans Mono'">第一行：Hello World!你好中国，Welcome.</span>
+<!--        <span id="measure-text" style="font-size: 10pt; font-family: 'DejaVu Sans Mono'">W</span>-->
+        <canvas id="text-view" width="1200" height="800"></canvas>
+
+    </div>
+
+    <script>
+
+
+
+
+
+
+
+        //
+        let textView = document.getElementById("text-view");
+        // let measureText = document.getElementById("measure-text");
+        let ctx = textView.getContext("2d");
+        // 12, 20
+        let texts = [
+            "第一行：Hello World!你好中国，Welcome.",
+            "第二行：测试来了",
+            "1em=16px",
+            "1em=12pt",
+            "1px=1/16 em=0.0625emggggggggggfffffffffff ",
+            "1px=3/4 pt=0.75pt",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=1/12 em≈0.0833em ",
+            "1pt=4/3 px≈1.3333px",
+        ];
+
+
+        function pt2px(px){
+            return px / 0.75;
+        }
+
+        function getFont(fontSize, fontFamily, isBold){
+            return fontSize + "px '" + fontFamily + "'";
+        }
+
+
+        let fontFamily = 'DejaVu Sans Mono',
+            fontSize = 10,
+            lineHeight = 5,
+            charHeight = pt2px(fontSize) * 2;
+
+        ctx.font = getFont(charHeight, fontFamily);
+        ctx.fillStyle = "#00FF00";
+
+        let charWidth = ctx.measureText("W").width,
+            charWidth2 = charWidth * 2,
+            rows = Math.floor(textView.height / charHeight);
+
+
+        function drawText(lines){
+
+            let dx, dy = charHeight + lineHeight;
+
+            let y = 0;
+            for(let line of lines){
+
+                dx = 0;
+                for(let i = 0, len = line.length; i < len; i++){
+
+                    let chr = line.charAt(i);
+
+                    if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(chr)) {
+                        // 双字节字符
+                        ctx.fillStyle = "rgba(255, 165, 0, 1)";
+                        ctx.fillText(chr, dx, dy);
+                        dx += charWidth2;
+                    } else {
+                        ctx.fillStyle = "#00FF00";
+                        ctx.fillText(chr, dx, dy);
+                        dx += charWidth;
+                    }
+
+                }
+
+                dy += charHeight + lineHeight;
+                y++;
+
+            }
+
+
+        }
+
+        drawText(texts);
+
+
+        // let fontSize = '10'; // pt
+        // let lineHeight = 10;
+        // // let height = measureText.getBoundingClientRect().height;
+        // let px = fontSize/0.75*2;
+        //
+        //
+        // ctx.font=(px+ 'px') + "'DejaVu Sans Mono'";
+        // // ctx.font="bold 20pt 'DejaVu Sans Mono'";
+        // // ctx.font="italic 20pt 'DejaVu Sans Mono'";
+        // // 度量字符
+        // const charWidth = ctx.measureText("W").width, charWidth2 = charWidth * 2;
+        // let dx = 0, dy = px + lineHeight;
+        //
+        // for(let text of texts){
+        //
+        //     dx = 0;
+        //     for(let i = 0, len = text.length; i < len; i++){
+        //
+        //         let chr = text.charAt(i);
+        //
+        //         ctx.font=(px + 'px') + " italic 'DejaVu Sans Mono'";
+        //
+        //         if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(chr)) {
+        //             // 双字节字符
+        //             ctx.fillStyle = "rgba(255, 165, 0, 1)";
+        //             ctx.fillText(chr, dx, dy);
+        //             dx += charWidth2;
+        //         } else {
+        //             ctx.fillStyle = "#000000";
+        //             ctx.fillText(chr, dx, dy);
+        //             dx += charWidth;
+        //         }
+        //
+        //     }
+        //
+        //     dy += px + lineHeight;
+        //
+        // }
+
+
+
+
+        // ctx.fillText("Hello World!", 0, 30);
+        // ctx.fillStyle = "red";
+        // ctx.fillText("中", ctx.measureText("Hello World!").width, 30);
+        // ctx.fillText("国", ctx.measureText("Hello World!中").width + 10, 30, 40);
+        // ctx.fillText("China", ctx.measureText("Hello World!中国").width + 20, 30);
+
+    </script>
+
+</body>
+</html>

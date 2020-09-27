@@ -8,6 +8,10 @@ class Composition {
         this.done = false;
         this.running = false;
         this.end = "";
+        this.flag = false;
+        this.isSafari = false;
+        this.isPC = true;
+        this.isProcess = false;
     }
     reset() {
         this.events = false;
@@ -16,6 +20,9 @@ class Composition {
         this.done = false;
         this.running = false;
         this.end = "";
+        this.flag = false;
+        this.isPC = false;
+        this.isProcess = false;
     }
 }
 exports.Composition = Composition;

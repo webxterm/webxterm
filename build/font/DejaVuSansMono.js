@@ -112,6 +112,9 @@ class DejaVuSansMono extends Font_1.Font {
     getFontName() {
         return "DejaVu Sans Mono";
     }
+    getLineHeight() {
+        return 10;
+    }
 }
 exports.DejaVuSansMono = DejaVuSansMono;
 class DejaVuSansMonoBold extends DejaVuSansMono {

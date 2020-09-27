@@ -1,0 +1,33 @@
+/**
+ * <code>Emoji表情解析</code><br/>
+ * 1, 变量选择器: VS-15 VS-16, See: https://en.wikipedia.org/wiki/Variation_Selectors_(Unicode_block)<br/>
+ * 格式：<br/>
+ *  VS-15: 符号+FE0E<br/>
+ *  VS-16: 符号+FE0F<br/>
+ * 2, (#, * 和 0–9)键帽符号<br/>
+ * 格式：<br/>
+ *  # + VS-16 + U+20E3<br/>
+ * 3, 改变肤色 See: https://en.wikipedia.org/wiki/Emoji   [Skin color]<br/>
+ *  U+1F3FB EMOJI MODIFIER FITZPATRICK TYPE-1-2<br/>
+ *  U+1F3FC EMOJI MODIFIER FITZPATRICK TYPE-3<br/>
+ *  U+1F3FD EMOJI MODIFIER FITZPATRICK TYPE-4<br/>
+ *  U+1F3FE EMOJI MODIFIER FITZPATRICK TYPE-5<br/>
+ *  U+1F3FF EMOJI MODIFIER FITZPATRICK TYPE-6<br/>
+ * 格式：<br/>
+ *  符号+肤色<br/>
+ * 4, ZWJ(零宽度连接符), See: https://unicode.org/Public/emoji/13.0/emoji-zwj-sequences.txt<br/>
+ * 执行Python脚本，查看出现的所有情况：See: http://note.youdao.com/s/bWbbU4Is<br/>
+ * 格式：<br/>
+ *  4.1. 符号+200D+符号+FE0F+200D+符号<br/>
+ *  4.2. 符号+200D+符号+FE0F+200D+符号+200D+符号<br/>
+ *  4.3. 符号+200D+符号<br/>
+ *  4.4. 符号+200D+符号+200D+符号<br/>
+ *  4.5. 符号+200D+符号+200D+符号+200D+符号<br/>
+ *  4.6. 符号+肤色+200D+符号+200D+符号+肤色<br/>
+ *  4.7. 符号+肤色+200D+符号<br/>
+ *  4.8. 符号+200D+符号+FE0F<br/>
+ *  4.9. 符号+肤色+200D+符号+FE0F<br/>
+ *  4.10. 符号+FE0F+200D+符号+FE0F<br/>
+ *  4.11. 符号+FE0F+200D+符号<br/>
+ * 5, 辅助平面字符(codePointAt(1) >= 0xDC00 && codePointAt(1) <= 0xDFFF)<br/>
+ */

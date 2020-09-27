@@ -73,7 +73,7 @@ export class OscParser {
             case 51:
             // reserved for Emacs shell.
             case 52:
-            // Manipulate Selection Data
+            // Manipulate CanvasSelection Data
             case 104:
                 // Ps = 1 0 4 ; c ⇒  Reset Color Number c.
                 break;

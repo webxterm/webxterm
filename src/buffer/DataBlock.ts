@@ -1,150 +1,301 @@
-// import {DataBlockAttribute} from "./DataBlockAttribute";
-//
-// /**
-//  * 缓冲区数据块
-//  */
-// export class DataBlock {
-//
-//     // 数据
-//     private _data: string = " ";
-//
-//     // 属性
-//     private _attribute: DataBlockAttribute = new DataBlockAttribute();
-//
-//     // 数据更新版本号，默认为0，每次数据更新的时候，都会+1
-//     private _version: number = 0;
-//
-//     // 自定义的超链接
-//     private _href: string = "";
-//
-//     // 判断是否为空，当_attribute.len2 == true的时候，下一个DataBlock将会为empty
-//     private _empty: boolean = false;
-//
-//     /**
-//      * 创建新块
-//      * @param data
-//      * @param attr
-//      */
-//     static newBlock(data: string, attr: DataBlockAttribute){
-//         let block = new DataBlock();
-//         block.data = data;
-//         block.copyValue(attr);
-//         return block;
-//     }
-//
-//     static newEmptyBlock(){
-//         return new DataBlock();
-//     }
-//
-//     get data(): string {
-//         return this._data;
-//     }
-//
-//     set data(value: string) {
-//         this._data = value;
-//         this._version++;
-//     }
-//
-//     get attribute(): DataBlockAttribute {
-//         return this._attribute;
-//     }
-//
-//     set attribute(value: DataBlockAttribute) {
-//         this._attribute = value;
-//     }
-//
-//     get version(): number {
-//         return this._version;
-//     }
-//
-//     set version(value: number) {
-//         this._version = value;
-//     }
-//
-//     get href(): string {
-//         return this._href;
-//     }
-//
-//     set href(value: string) {
-//         this._href = value;
-//     }
-//
-//     get empty(): boolean {
-//         return this._empty;
-//     }
-//
-//     set empty(value: boolean) {
-//         this._empty = value;
-//     }
-//
-//     /**
-//      * 抹除数据块中的数据
-//      * 返回是否已被修改过。
-//      * @param data
-//      * @param attr
-//      */
-//     public erase(data: string = "",
-//                  attr: DataBlockAttribute): boolean {
-//
-//         let dirty = this.copyValue(attr);
-//
-//         if(data != this.data){
-//             this.data = data;
-//             this.empty = false;
-//             this.attribute.len2 = false;
-//
-//             if(!dirty) dirty = true;
-//         } else {
-//             this._version++;
-//         }
-//
-//         return dirty;
-//     }
-//
-//     public copyValue(attr: DataBlockAttribute): boolean {
-//
-//         const version: number = this._attribute.version;
-//
-//         this._attribute.backgroundColorClass = attr.backgroundColorClass;
-//         this._attribute.colorClass = attr.colorClass;
-//         this._attribute.bold = attr.bold;
-//         this._attribute.crossedOut = attr.crossedOut;
-//         this._attribute.inverse = attr.inverse;
-//         this._attribute.inverse = attr.inverse;
-//         this._attribute.invisible = attr.invisible;
-//         this._attribute.italic = attr.italic;
-//         this._attribute.len2 = attr.len2;
-//         this._attribute.rapidBlink = attr.rapidBlink;
-//         this._attribute.slowBlink = attr.slowBlink;
-//         this._attribute.underline = attr.underline;
-//
-//         return version != this._attribute.version;
-//     }
-//
-//     /**
-//      * 通过attribute解析出class
-//      */
-//     public getClassName(): string {
-//
-//         let value = [
-//             this._attribute.backgroundColorClass,
-//             this._attribute.colorClass
-//         ];
-//
-//         if (this._attribute.bold) value.push("bold");
-//         if (this._attribute.crossedOut) value.push("crossed-out");
-//         if (this._attribute.inverse) value.push("inverse");
-//         if (this._attribute.invisible) value.push("invisible");
-//         if (this._attribute.italic) value.push("italic");
-//         if (this._attribute.len2) value.push("len2");
-//         if (this._attribute.rapidBlink) value.push("rapid-blink");
-//         if (this._attribute.slowBlink) value.push("slow-blink");
-//         if (this._attribute.underline) value.push("underline");
-//         if (this._attribute.faint) value.push("faint");
-//         if (this.data === "\t") value.push("tab");
-//
-//         return value.join(" ").trim();
-//     }
-//
-//
-// }
+import {DataBlockAttribute} from "./DataBlockAttribute";
+
+/**
+ * 缓冲区数据块
+ */
+export class DataBlock {
+
+    // 数据
+    private _data: string = " ";
+    // private _dataArray: string[] = [];
+    private _isEmpty: boolean = true;
+    private _length: number = 0;
+    private _displaySize: number = 1;
+
+    // 是否为默认的属性
+    private _isDefaultAttrs: boolean = true;
+    // 属性
+    private _colorClass = "";
+    private _backgroundColorClass = "";
+
+    private _className = "";
+    private _isBold = false;
+    private _isFaint = false;
+    private _isUnderline = false;
+    private _isItalic = false;
+    private _isSlowBlink = false;
+    private _isRapidBlink = false;
+    private _isInverse = false;
+    private _isInvisible = false;
+    private _isCrossedOut = false;
+
+    static instance: DataBlock;
+
+    public static getDataBlock(): DataBlock {
+        if (DataBlock.instance == null) {
+            DataBlock.instance = new DataBlock();
+        } else {
+            DataBlock.instance.reset();
+        }
+        return DataBlock.instance;
+    }
+
+    private reset() {
+        // 数据
+        if(this._data != " ") this._data = " ";
+        if(!this._isEmpty) this._isEmpty = true;
+        if(this._length != 0) this._length = 0;
+        if(this._displaySize != 1) this._displaySize = 1;
+        // 是否为默认的属性
+        if(!this._isDefaultAttrs) this._isDefaultAttrs = true;
+        // 属性
+        if(this._colorClass != "") this._colorClass = "";
+        if(this._backgroundColorClass != "") this._backgroundColorClass = "";
+
+        if(this._className) this._className = "";
+        if(this._isBold) this._isBold = false;
+        if(this._isFaint) this._isFaint = false;
+        if(this._isUnderline) this._isUnderline = false;
+        if(this._isItalic) this._isItalic = false;
+        if(this._isSlowBlink) this._isSlowBlink = false;
+        if(this._isRapidBlink) this._isRapidBlink = false;
+        if(this._isInverse) this._isInverse = false;
+        if(this._isInvisible) this._isInvisible = false;
+        if(this._isCrossedOut) this._isCrossedOut = false;
+    }
+
+    get data(): string {
+        return this._data;
+    }
+
+    set data(value: string) {
+        this._data = value;
+    }
+
+    get isEmpty(): boolean {
+        return this._isEmpty;
+    }
+
+    set isEmpty(value: boolean) {
+        this._isEmpty = value;
+    }
+
+    get length(): number {
+        return this._length;
+    }
+
+    set length(value: number) {
+        this._length = value;
+    }
+
+    get displaySize(): number {
+        return this._displaySize;
+    }
+
+    set displaySize(value: number) {
+        this._displaySize = value;
+    }
+
+    get colorClass(): string {
+        return this._colorClass;
+    }
+
+    set colorClass(value: string) {
+        this._colorClass = value;
+    }
+
+    get backgroundColorClass(): string {
+        return this._backgroundColorClass;
+    }
+
+    set backgroundColorClass(value: string) {
+        this._backgroundColorClass = value;
+    }
+
+    get isBold(): boolean {
+        return this._isBold;
+    }
+
+    set isBold(value: boolean) {
+        this._isBold = value;
+    }
+
+    get isFaint(): boolean {
+        return this._isFaint;
+    }
+
+    set isFaint(value: boolean) {
+        this._isFaint = value;
+    }
+
+    get isUnderline(): boolean {
+        return this._isUnderline;
+    }
+
+    set isUnderline(value: boolean) {
+        this._isUnderline = value;
+    }
+
+    get isItalic(): boolean {
+        return this._isItalic;
+    }
+
+    set isItalic(value: boolean) {
+        this._isItalic = value;
+    }
+
+    get isSlowBlink(): boolean {
+        return this._isSlowBlink;
+    }
+
+    set isSlowBlink(value: boolean) {
+        this._isSlowBlink = value;
+    }
+
+    get isRapidBlink(): boolean {
+        return this._isRapidBlink;
+    }
+
+    set isRapidBlink(value: boolean) {
+        this._isRapidBlink = value;
+    }
+
+    get isInverse(): boolean {
+        return this._isInverse;
+    }
+
+    set isInverse(value: boolean) {
+        this._isInverse = value;
+    }
+
+    get isInvisible(): boolean {
+        return this._isInvisible;
+    }
+
+    set isInvisible(value: boolean) {
+        this._isInvisible = value;
+    }
+
+    get isCrossedOut(): boolean {
+        return this._isCrossedOut;
+    }
+
+    set isCrossedOut(value: boolean) {
+        this._isCrossedOut = value;
+    }
+
+
+    // get dataArray(): string[] {
+    //     return this._dataArray;
+    // }
+    //
+    // set dataArray(value: string[]) {
+    //     this._dataArray = value;
+    // }
+
+    get isDefaultAttrs(): boolean {
+        return this._isDefaultAttrs;
+    }
+
+    set isDefaultAttrs(value: boolean) {
+        this._isDefaultAttrs = value;
+    }
+
+
+    get className(): string {
+        return this._className;
+    }
+
+    set className(value: string) {
+        this._className = value;
+    }
+
+    // /**
+    //  * 解码
+    //  * @param block
+    //  */
+    // public static decode(block: string): DataBlock {
+    //
+    //     let b = DataBlock.getDataBlock();
+    //
+    //     // len == 0
+    //     if (!block) {
+    //         b.displaySize = 0;
+    //         b.length = 0;
+    //         b.data = "";
+    //         return b;
+    //     }
+    //
+    //     const arr = Array.from(block);
+    //     const len = arr.length;
+    //     if (len == 1) {
+    //         b.length = 1;
+    //         b.displaySize = 1;
+    //         b.data = block;
+    //     } else if (len > 1) { // 非空块
+    //         b.length = parseInt(arr[0], 8);
+    //         b.displaySize = parseInt(arr[1], 8);
+    //         const array = arr.slice(2);
+    //         // b.dataArray = array.slice(0, b.length);
+    //         const dataArray = arr.slice(2, 2 + b.length);
+    //         b.data = dataArray.join("");
+    //         b.isDefaultAttrs = !(array.length > b.length);
+    //
+    //         if (!b.isDefaultAttrs) {
+    //             const attrs = DataBlockAttribute.parseClassName(array.slice(b.length).join(""));
+    //             if (attrs[0].indexOf("bold") >= 0) b.isBold = true;
+    //             if (attrs[0].indexOf("faint") >= 0) b.isFaint = true;
+    //             if (attrs[0].indexOf("underline") >= 0) b.isUnderline = true;
+    //             if (attrs[0].indexOf("italic") >= 0) b.isItalic = true;
+    //             if (attrs[0].indexOf("slow-blink") >= 0) b.isSlowBlink = true;
+    //             if (attrs[0].indexOf("rapid-blink") >= 0) b.isRapidBlink = true;
+    //             if (attrs[0].indexOf("inverse") >= 0) b.isInverse = true;
+    //             if (attrs[0].indexOf("invisible") >= 0) b.isInvisible = true;
+    //             if (attrs[0].indexOf("crossed-out") >= 0) b.isCrossedOut = true;
+    //
+    //             if (attrs[1]) b.colorClass = attrs[1];
+    //             if (attrs[2]) b.backgroundColorClass = attrs[2];
+    //
+    //             b.className = attrs[0];
+    //         }
+    //
+    //     }
+    //     return b;
+    // }
+
+    // /**
+    //  * 编码
+    //  * @param data
+    //  * @param blockAttr
+    //  * @param displaySize
+    //  */
+    // public static encode(data: string, blockAttr: DataBlockAttribute, displaySize: number) {
+    //     const hex = blockAttr.hex;
+    //     // 真实长度 + 显示长度 + 数据 + 字符属性;前景色;背景色
+    //     const len = Array.from(data).length;
+    //     if (len == 0) return "";
+    //     if (displaySize == 1 && len == 1 && hex == "") {
+    //         return data;
+    //     }
+    //     // 长度最大为15
+    //     return len.toString(8) + displaySize.toString(8) + data + blockAttr.hex;
+    // }
+    //
+    // /**
+    //  * 编码
+    //  * @param data
+    //  * @param displaySize
+    //  */
+    // public static encode2(data: string, displaySize: number) {
+    //     // 真实长度 + 显示长度 + 数据 + 字符属性;前景色;背景色
+    //     const len = Array.from(data).length;
+    //     if (len == 0) return "";
+    //     if (displaySize == 1 && len == 1) {
+    //         return data;
+    //     }
+    //     // 长度最大为15
+    //     return len.toString(32) + displaySize.toString(16) + data;
+    // }
+
+
+}

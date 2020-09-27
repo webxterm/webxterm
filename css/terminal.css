@@ -95,7 +95,7 @@ html, body {
     overflow-x: hidden;
     overflow-y: scroll;
     /*transition: 0.15s;*/
-    position: relative;:: -webkit-scrollbar: 15 px;
+    position: relative;
 }
 
 .webxterm .measure {
@@ -110,10 +110,29 @@ html, body {
     overflow: scroll;
 }
 
+.webxterm .scroll-view{
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    cursor: text;
+}
+
 .webxterm .viewport {
     word-break: break-all;
     padding: 0 4px;
     white-space: pre;
+    position: relative;
+}
+
+.webxterm .viewport canvas {
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    cursor: text;
 }
 
 .webxterm .viewport-row {
@@ -178,6 +197,12 @@ html, body {
     z-index: 2;
     height: 0;
     font-size: 1px;
+}
+
+.webxterm .clipboard::selection
+{
+    background-color: transparent;
+    color: transparent;
 }
 
 

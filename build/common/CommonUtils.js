@@ -99,5 +99,51 @@ class CommonUtils {
     static str_len(s = '') {
         return s.replace(/[^\x00-\xff]/g, "01").length;
     }
+    static copyArray(array) {
+        let result = [];
+        for (let i = 0, len = array.length; i < len; i++) {
+            result[i] = array[i];
+        }
+        return result;
+    }
+    static isChinese(str) {
+        return /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(str);
+    }
+    static isChineseSymbol(str) {
+        return /[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(str);
+    }
+    static isNumberLetter(str) {
+        return /[a-zA-Z0-9_]/gi.test(str);
+    }
+    static isSymbol(str) {
+        return /[`~!@#$^&*()=|{}':;,\[\].<>/? ]/gi.test(str);
+    }
+    static isSamePoint(p1, p2) {
+        return p1 && p2 && (p1.x == p2.x && p1.y == p2.y);
+    }
+    static indexPoint(p1, p2) {
+        if (!p1 || !p2) {
+            return false;
+        }
+        if (p1.y < p2.y) {
+            return true;
+        }
+        else if (p1.y == p2.y) {
+            return p1.x < p2.x;
+        }
+        return false;
+    }
+    static reverseIndexPoint(p1, p2) {
+        if (!p1 || !p2) {
+            return false;
+        }
+        if (p1.y < p2.y) {
+            return false;
+        }
+        else if (p1.y == p2.y) {
+            return p1.x > p2.x;
+        }
+        return true;
+    }
 }
 exports.CommonUtils = CommonUtils;

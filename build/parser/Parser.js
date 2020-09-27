@@ -1,18 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const DataBlock_1 = require("../buffer/DataBlock");
-var State;
-(function (State) {
-    State[State["NORMAL"] = 0] = "NORMAL";
-    State[State["ESC"] = 1] = "ESC";
-    State[State["CSI"] = 2] = "CSI";
-    State[State["OSC"] = 3] = "OSC";
-    State[State["CHARSET"] = 4] = "CHARSET";
-    State[State["DCS"] = 5] = "DCS";
-    State[State["IGNORE"] = 6] = "IGNORE";
-    State[State["PM"] = 7] = "PM";
-    State[State["APC"] = 8] = "APC";
-})(State || (State = {}));
+const Terminal_1 = require("../Terminal");
+const State = {
+    NORMAL: 0, ESC: 1, CSI: 2, OSC: 3, CHARSET: 4, DCS: 5, IGNORE: 6, PM: 7, APC: 8
+};
 const C0 = {
     NUL: "\x00",
     SOH: "\x01",
@@ -111,7 +102,6 @@ class Parser {
         this.promptSize = 0;
         this.terminal = terminal;
         this.promptSize = terminal.prompt.length;
-        this.fragment = document.createDocumentFragment();
     }
     get x() {
         return this.activeBuffer.x;
@@ -133,14 +123,9 @@ class Parser {
             value = 1;
         }
         this.activeBuffer.y = value;
-        if (!this.activeBufferLine.dirty)
-            this.activeBufferLine.dirty = true;
     }
     get bufferSet() {
         return this.terminal.bufferSet;
-    }
-    get printer() {
-        return this.terminal.printer;
     }
     get applicationKeypad() {
         return this._applicationKeypad;
@@ -157,44 +142,32 @@ class Parser {
     get viewport() {
         return this.terminal.viewport;
     }
-    get activeBufferLine() {
-        return this.activeBuffer.activeBufferLine;
-    }
     get activeBuffer() {
         return this.bufferSet.activeBuffer;
     }
     activateAltBuffer() {
         const len = this.activeBuffer.size;
         for (let y = 1; y <= len; y++) {
-            const line = this.activeBuffer.get(y);
-            this.printer.printLine(line, false);
+            if (this.terminal.renderType == Terminal_1.RenderType.HTML) {
+            }
+            else if (this.terminal.renderType == Terminal_1.RenderType.CANVAS) {
+            }
         }
         this.bufferSet.activateAltBuffer();
         this.terminal.addBufferFillRows();
     }
     activateNormalBuffer() {
-        const lines = this.bufferSet.activeBuffer.lines;
-        for (let i = 0, len = lines.length; i < len; i++) {
-            lines[i].element.remove();
-        }
         this.bufferSet.activateNormalBuffer();
-        let fragment = document.createDocumentFragment();
-        for (let y = 1; y <= this.activeBuffer.size; y++) {
-            let line = this.activeBuffer.get(y);
-            if (line && !line.used) {
-                fragment.appendChild(line.element);
-            }
-        }
-        this.viewport.appendChild(fragment);
     }
-    parse(text) {
-        let leftChr = "", chr = "";
-        const len = text.length;
-        for (let i = 0; i < len; i++) {
-            chr = text[i];
+    parse(strings, isComposition, callback = undefined) {
+        let leftChr = "";
+        let heartBeatValue = '';
+        const text = Array.from(strings), len = text.length;
+        for (let i = 0, s; i < len; i++) {
+            s = text[i];
             switch (this.state) {
                 case State.NORMAL:
-                    switch (chr) {
+                    switch (s) {
                         case C0.NUL:
                             break;
                         case C0.BEL:
@@ -222,7 +195,9 @@ class Parser {
                         case C0.SO:
                             break;
                         case C0.HT:
-                            this.tab();
+                            if (this.terminal.renderType == Terminal_1.RenderType.CANVAS) {
+                                this.tab();
+                            }
                             break;
                         case C0.VT:
                             this.nextLine();
@@ -231,15 +206,29 @@ class Parser {
                             this.state = State.ESC;
                             break;
                         default:
-                            if (!this.handleDoubleChars(chr)) {
-                                this.update(chr);
+                            {
+                                const asciiStandardCode = s.codePointAt(0);
+                                if (asciiStandardCode && 32 <= asciiStandardCode && asciiStandardCode < 127) {
+                                    if (s.codePointAt(1) == undefined) {
+                                        this.update(s);
+                                        break;
+                                    }
+                                }
+                            }
+                            const result = this.handleEmoji(i, s, text);
+                            if (result != -1) {
+                                i = result;
+                                break;
+                            }
+                            if (!this.handleDoubleChars(s)) {
+                                this.update(s);
                             }
                             break;
                     }
                     break;
                 case State.CHARSET:
                     let cs;
-                    switch (chr) {
+                    switch (s) {
                         case '0':
                             cs = charsets.SCLD;
                             break;
@@ -306,36 +295,36 @@ class Parser {
                     break;
                 case State.CSI:
                     if (this.params.length === 0) {
-                        if (chr === " "
-                            || chr === "?"
-                            || chr === ">"
-                            || chr === "="
-                            || chr === "!"
-                            || chr === "#") {
-                            this.prefix = chr;
+                        if (s === " "
+                            || s === "?"
+                            || s === ">"
+                            || s === "="
+                            || s === "!"
+                            || s === "#") {
+                            this.prefix = s;
                             break;
                         }
                     }
                     else {
-                        if (chr === "@"
-                            || chr === "`"
-                            || chr === "$"
-                            || chr === "\""
-                            || chr === "*"
-                            || chr === "#") {
-                            this.suffix = chr;
+                        if (s === "@"
+                            || s === "`"
+                            || s === "$"
+                            || s === "\""
+                            || s === "*"
+                            || s === "#") {
+                            this.suffix = s;
                             break;
                         }
                     }
-                    if (chr >= "0" && chr <= "9") {
-                        this.currentParam = this.currentParam * 10 + chr.charCodeAt(0) - 48;
+                    if (s >= "0" && s <= "9") {
+                        this.currentParam = this.currentParam * 10 + s.charCodeAt(0) - 48;
                         break;
                     }
                     this.params.push(this.currentParam);
                     this.currentParam = 0;
-                    if (chr === ";")
+                    if (s === ";")
                         break;
-                    this.terminal.esParser.parse(chr, this.params, this.prefix, this.suffix);
+                    this.terminal.esParser.parse(s, this.params, this.prefix, this.suffix);
                     this.params = [];
                     this.currentParam = 0;
                     this.prefix = "";
@@ -345,7 +334,7 @@ class Parser {
                 case State.DCS:
                     break;
                 case State.ESC:
-                    switch (chr) {
+                    switch (s) {
                         case "D":
                             this.index();
                             this.state = State.NORMAL;
@@ -396,6 +385,10 @@ class Parser {
                             this.state = State.OSC;
                             break;
                         case "^":
+                            this.currentParam = 0;
+                            this.params = [];
+                            this.prefix = "";
+                            this.suffix = "";
                             this.state = State.PM;
                             break;
                         case "_":
@@ -498,8 +491,7 @@ class Parser {
                 case State.IGNORE:
                     break;
                 case State.OSC:
-                    leftChr = text[i - 1];
-                    if ((leftChr === C0.ESC && chr === '\\') || chr === C0.BEL) {
+                    if ((leftChr === C0.ESC && s === '\\') || s === C0.BEL) {
                         if (leftChr === C0.ESC) {
                             if (typeof this.currentParam === 'string') {
                                 this.currentParam = this.currentParam.slice(0, -1);
@@ -516,11 +508,11 @@ class Parser {
                     }
                     else {
                         if (!this.params.length) {
-                            if (chr >= '0' && chr <= '9') {
+                            if (s >= '0' && s <= '9') {
                                 this.currentParam =
-                                    this.currentParam * 10 + chr.charCodeAt(0) - 48;
+                                    this.currentParam * 10 + s.charCodeAt(0) - 48;
                             }
-                            else if (chr === ';') {
+                            else if (s === ';') {
                                 this.params.push(this.currentParam);
                                 this.currentParam = '';
                             }
@@ -528,17 +520,16 @@ class Parser {
                                 if (this.currentParam === 0) {
                                     this.currentParam = '';
                                 }
-                                this.currentParam += chr;
+                                this.currentParam += s;
                             }
                         }
                         else {
-                            this.currentParam += chr;
+                            this.currentParam += s;
                         }
                     }
                     break;
                 case State.PM:
-                    leftChr = text[i - 1];
-                    if ((leftChr === C0.ESC && chr === '\\') || chr === C0.BEL) {
+                    if ((leftChr === C0.ESC && s === '\\') || s === C0.BEL) {
                         if (leftChr === C0.ESC) {
                             if (typeof this.currentParam === 'string') {
                                 this.currentParam = this.currentParam.slice(0, -1);
@@ -553,13 +544,13 @@ class Parser {
                             case 1:
                                 this.terminal.registerConnect();
                                 this.terminal.cursor.enable = false;
-                                break;
+                                return;
                             case 2:
-                                break;
+                                return;
                             case 3:
+                                heartBeatValue = this.params[1];
                                 if (this.terminal.eventMap["heartbeat"])
-                                    this.terminal.eventMap["heartbeat"](this.params[1]);
-                                break;
+                                    this.terminal.eventMap["heartbeat"](heartBeatValue);
                         }
                         this.params = [];
                         this.currentParam = 0;
@@ -567,11 +558,11 @@ class Parser {
                     }
                     else {
                         if (!this.params.length) {
-                            if (chr >= '0' && chr <= '9') {
+                            if (s >= '0' && s <= '9') {
                                 this.currentParam =
-                                    this.currentParam * 10 + chr.charCodeAt(0) - 48;
+                                    this.currentParam * 10 + s.charCodeAt(0) - 48;
                             }
-                            else if (chr === ';') {
+                            else if (s === ';') {
                                 this.params.push(this.currentParam);
                                 this.currentParam = '';
                             }
@@ -579,43 +570,246 @@ class Parser {
                                 if (this.currentParam === 0) {
                                     this.currentParam = '';
                                 }
-                                this.currentParam += chr;
+                                this.currentParam += s;
                             }
                         }
                         else {
-                            this.currentParam += chr;
+                            this.currentParam += s;
                         }
                     }
                     break;
             }
+            leftChr = s;
         }
-        if (!this.activeBufferLine.dirty)
-            this.activeBufferLine.dirty = true;
-        this.printer.printBuffer();
-        this.flush();
+        if (!!heartBeatValue && strings == '\x1b^3;' + heartBeatValue + '\x1b\\') {
+            return;
+        }
+        if (this.terminal.textRenderer) {
+            this.terminal.textRenderer.flushLines(this.activeBuffer.change_buffer, false);
+        }
+        console.info("Parser:x" + this.x);
         this.terminal.scrollToBottomOnInput();
+        if (callback) {
+            callback(len, this);
+        }
     }
-    handleDoubleChars(chr, href = "") {
+    pushAuxCodePoint(codePoint, array) {
+        if (!codePoint)
+            return array;
+        if (!(codePoint >= 0xDC00 && codePoint <= 0xDFFF)) {
+            array.push(codePoint);
+        }
+        return array;
+    }
+    pushStr(s, array) {
+        const codePoint0 = s.codePointAt(0), codePoint1 = s.codePointAt(1);
+        array.push(codePoint0 || 0);
+        return this.pushAuxCodePoint(codePoint1 || 0, array);
+    }
+    outputEmoji(dataArray, isJoining = false) {
+        this.update(String.fromCodePoint(...dataArray));
+    }
+    handleEmoji(start, s, text) {
+        let i = start;
+        const codePoint0 = s.codePointAt(0) || 0;
+        const codePoint1 = s.codePointAt(1) || 0;
+        const nextCodePoint0 = text[i + 1] ? (text[i + 1].codePointAt(0) || 0) : 0;
+        const array = [];
+        if (nextCodePoint0 === 0xFE0E) {
+            i++;
+            array.push(codePoint0, nextCodePoint0);
+            this.outputEmoji(array);
+            return i;
+        }
+        else if (nextCodePoint0 === 0xFE0F) {
+            i++;
+            array.push(codePoint0);
+            this.pushAuxCodePoint(codePoint1, array);
+            array.push(nextCodePoint0);
+            const codePoint = text[i + 1] ? text[i + 1].codePointAt(0) : 0;
+            if (codePoint === 0x20E3) {
+                i++;
+                array.push(codePoint);
+                this.outputEmoji(array);
+            }
+            else if (codePoint === 0x200D) {
+                array.push(codePoint);
+                i++;
+                if (text[i + 1]) {
+                    this.pushStr(text[i + 1], array);
+                    i++;
+                }
+                if (text[i + 1] && text[i + 1].codePointAt(0) === 0xFE0F) {
+                    this.pushStr(text[i + 1], array);
+                    this.outputEmoji(array, true);
+                    i++;
+                }
+                else {
+                    this.outputEmoji(array, true);
+                }
+            }
+            else {
+                this.outputEmoji(array);
+            }
+            return i;
+        }
+        else if (0x1F3FB <= nextCodePoint0 && nextCodePoint0 <= 0x1F3FF) {
+            array.push(codePoint0);
+            this.pushAuxCodePoint(codePoint1, array);
+            array.push(nextCodePoint0);
+            i++;
+            if (text[i + 1] && text[i + 1].codePointAt(0) === 0x200D) {
+                array.push(0x200D);
+                i++;
+                if (text[i + 1]) {
+                    this.pushStr(text[i + 1], array);
+                    i++;
+                }
+                if (text[i + 1]) {
+                    const codePoint0 = text[i + 1].codePointAt(0) || 0;
+                    if (codePoint0 === 0x200D) {
+                        array.push(codePoint0);
+                        i++;
+                        if (text[i + 1] && text[i + 2]) {
+                            const next3CodePoint0 = text[i + 2].codePointAt(0) || 0;
+                            if (0x1F3FB <= next3CodePoint0 && next3CodePoint0 <= 0x1F3FF) {
+                                this.pushStr(text[i + 1], array);
+                                i++;
+                                array.push(next3CodePoint0);
+                                i++;
+                                this.outputEmoji(array, true);
+                            }
+                        }
+                    }
+                    else if (codePoint0 === 0xFE0F) {
+                        array.push(codePoint0);
+                        i++;
+                        this.outputEmoji(array, true);
+                    }
+                    else {
+                        this.outputEmoji(array, true);
+                    }
+                }
+                else {
+                    this.outputEmoji(array, true);
+                }
+                return i;
+            }
+            this.outputEmoji(array, true);
+            i++;
+            return i;
+        }
+        else if (nextCodePoint0 === 0x200D) {
+            array.push(codePoint0);
+            this.pushAuxCodePoint(codePoint1, array);
+            array.push(nextCodePoint0);
+            i++;
+            if (text[i + 1]) {
+                this.pushStr(text[i + 1], array);
+                i++;
+            }
+            if (text[i + 1]) {
+                const codePoint0 = text[i + 1].codePointAt(0);
+                if (codePoint0 === 0x200D) {
+                    array.push(codePoint0);
+                    i++;
+                    if (text[i + 1]) {
+                        this.pushStr(text[i + 1], array);
+                        i++;
+                        if (text[i + 1]) {
+                            const next3CodePoint0 = text[i + 1].codePointAt(0);
+                            if (next3CodePoint0 === 0x200D) {
+                                array.push(next3CodePoint0);
+                                i++;
+                                if (text[i + 1]) {
+                                    this.pushStr(text[i + 1], array);
+                                    i++;
+                                    this.outputEmoji(array, true);
+                                }
+                            }
+                            else {
+                                this.outputEmoji(array, true);
+                            }
+                        }
+                        else {
+                            this.outputEmoji(array, true);
+                        }
+                    }
+                }
+                else if (codePoint0 === 0xFE0F) {
+                    array.push(codePoint0);
+                    i++;
+                    if (text[i + 1]) {
+                        const next2CodePoint0 = text[i + 1].codePointAt(0);
+                        if (next2CodePoint0 === 0x200D) {
+                            array.push(next2CodePoint0);
+                            i++;
+                            if (text[i + 1]) {
+                                this.pushStr(text[i + 1], array);
+                                i++;
+                                if (text[i + 1]) {
+                                    const next4CodePoint0 = text[i + 1].codePointAt(0);
+                                    if (next4CodePoint0 === 0x200D) {
+                                        array.push(next4CodePoint0);
+                                        i++;
+                                        if (text[i + 1]) {
+                                            this.pushStr(text[i + 1], array);
+                                            i++;
+                                            this.outputEmoji(array, true);
+                                        }
+                                    }
+                                    else {
+                                        this.outputEmoji(array, true);
+                                    }
+                                }
+                                else {
+                                    this.outputEmoji(array, true);
+                                }
+                            }
+                        }
+                        else {
+                            this.outputEmoji(array, true);
+                        }
+                    }
+                    else {
+                        this.outputEmoji(array, true);
+                    }
+                }
+                else {
+                    this.outputEmoji(array, true);
+                }
+            }
+            else {
+                this.outputEmoji(array, true);
+            }
+            return i;
+        }
+        else if (nextCodePoint0 >= 0x1F1E6 && nextCodePoint0 <= 0x1F1FF) {
+            if (codePoint0 >= 0x1F1E6 && codePoint0 <= 0x1F1FF) {
+                array.push(codePoint0);
+                this.pushAuxCodePoint(codePoint1 || 0, array);
+                array.push(nextCodePoint0);
+                const nextCodePoint1 = text[i + 1] ? (text[i + 1].codePointAt(1) || 0) : 0;
+                this.pushAuxCodePoint(nextCodePoint1 || 0, array);
+                this.outputEmoji(array);
+                i++;
+            }
+            return i;
+        }
+        if (codePoint1 >= 0xDC00 && codePoint1 <= 0xDFFF) {
+            console.info("辅助平面字符：" + String.fromCodePoint(codePoint0));
+            this.outputEmoji([codePoint0]);
+            return i;
+        }
+        return -1;
+    }
+    handleDoubleChars(chr) {
         if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(chr)) {
             if (this.x > this.activeBuffer.columns) {
-                this.nextLine();
+                this.nextLine(true);
                 this.x = 1;
             }
-            let block = DataBlock_1.DataBlock.newBlock(chr, this.terminal.esParser.attribute);
-            block.attribute.len2 = true;
-            if (!!href) {
-                block.href = href;
-            }
-            let block2 = DataBlock_1.DataBlock.newEmptyBlock();
-            block2.empty = true;
-            if (this.terminal.esParser.insertMode) {
-                this.activeBufferLine.insert(this.x, block, block2);
-            }
-            else if (this.terminal.esParser.replaceMode) {
-                this.activeBufferLine.replace(this.x, block, block2);
-            }
-            if (!this.activeBufferLine.dirty)
-                this.activeBufferLine.dirty = true;
+            this.activeBuffer.replace(this.y - 1, this.x - 1, 2, this.terminal.esParser.attribute, chr, "");
             this.x += 2;
             return true;
         }
@@ -634,7 +828,7 @@ class Parser {
             this.scrollUp();
         }
         else {
-            if (!this.bufferSet.activeBuffer.get(this.y)) {
+            if (!this.bufferSet.activeBuffer.change_buffer.lines[this.y]) {
                 this.newLine();
             }
         }
@@ -647,7 +841,10 @@ class Parser {
             this.y--;
         }
     }
-    nextLine() {
+    nextLine(isSoftWrap = false) {
+        if (isSoftWrap)
+            console.info("isSoftWrap:" + isSoftWrap);
+        this.activeBuffer.change_buffer.line_soft_wraps[this.y - 1] = isSoftWrap ? 1 : 0;
         if (this.y === this.activeBuffer.scrollBottom) {
             this.scrollUp();
         }
@@ -656,7 +853,8 @@ class Parser {
         }
     }
     saveCursor() {
-        this.printer.printLine(this.activeBuffer.get(this.y));
+        if (this.terminal.cursorRenderer)
+            this.terminal.cursorRenderer.clearCursor();
         this.activeBuffer.savedY = this.y;
         this.activeBuffer.savedX = this.x;
     }
@@ -665,83 +863,44 @@ class Parser {
         this.x = this.activeBuffer.savedX;
     }
     newLine() {
-        let line = this.activeBuffer.getBlankLine();
-        this.activeBuffer.append(line);
-        this.append(line.element);
+        this.activeBuffer.appendLine();
     }
-    update(chr, href = "") {
+    update(chr) {
         if (this.x > this.activeBuffer.columns) {
-            this.nextLine();
+            this.nextLine(true);
             this.x = 1;
         }
-        let block = DataBlock_1.DataBlock.newBlock(chr, this.terminal.esParser.attribute);
-        if (!!href) {
-            block.href = href;
-        }
-        if (this.terminal.esParser.insertMode) {
-            this.activeBufferLine.insert(this.x, block);
-        }
-        else if (this.terminal.esParser.replaceMode) {
-            this.activeBufferLine.replace(this.x, block);
-            this.x += 1;
-        }
-        if (!this.activeBufferLine.dirty) {
-            this.activeBufferLine.dirty = true;
-        }
+        this.activeBuffer.replace(this.y - 1, this.x - 1, 1, this.terminal.esParser.attribute, chr);
+        this.x += 1;
     }
     insertLine() {
-        let line = this.activeBuffer.getBlankLine();
-        let afterNode = this.activeBuffer.insert(this.y, line)[0];
-        this.insertBefore(line.element, afterNode);
+        this.activeBuffer.insertLine(this.y - 1, 1);
         const y = this.activeBuffer.scrollBottom + 1;
-        this.activeBuffer.delete(y, 1, false);
+        this.activeBuffer.removeLine(y - 1, 1, false);
     }
     deleteLine() {
-        const line = this.activeBuffer.getBlankLine();
         if (this.activeBuffer.scrollBottom === this.terminal.rows) {
-            this.activeBuffer.append(line);
-            this.append(line.element);
+            this.activeBuffer.appendLine();
         }
         else {
             const y = this.activeBuffer.scrollBottom + 1;
-            let afterNode = this.activeBuffer.insert(y, line)[0];
-            this.insertBefore(line.element, afterNode);
+            this.activeBuffer.insertLine(y - 1, 1);
         }
-        this.activeBuffer.delete(this.y, 1, false);
+        this.activeBuffer.removeLine(this.y - 1, 1, false);
     }
     scrollUp() {
-        let line = this.activeBuffer.getBlankLine();
         if (this.activeBuffer.scrollBottom === this.terminal.rows) {
-            this.activeBuffer.append(line);
-            this.append(line.element);
+            this.activeBuffer.appendLine();
         }
         else {
             const y = this.activeBuffer.scrollBottom + 1;
-            let afterNode = this.activeBuffer.insert(y, line)[0];
-            this.insertBefore(line.element, afterNode);
+            this.activeBuffer.insertLine(y - 1, 1);
         }
-        const saveLines = this.activeBuffer.scrollTop === 1;
-        const savedLines = this.activeBuffer.delete(this.activeBuffer.scrollTop, 1, saveLines);
-        for (let savedLine of savedLines) {
-            this.printer.printLine(savedLine, false);
-        }
+        this.activeBuffer.removeLine(this.activeBuffer.scrollTop - 1, 1, this.activeBuffer.scrollTop === 1);
     }
     scrollDown() {
-        let line = this.activeBuffer.getBlankLine();
-        this.activeBuffer.delete(this.activeBuffer.scrollBottom, 1, false);
-        let afterNode = this.activeBuffer.insert(this.activeBuffer.scrollTop, line)[0];
-        this.insertBefore(line.element, afterNode);
-    }
-    flush() {
-        this.viewport.appendChild(this.fragment);
-        this.fragment = document.createDocumentFragment();
-    }
-    append(newChild) {
-        this.viewport.appendChild(newChild);
-    }
-    insertBefore(newChild, refChild) {
-        this.flush();
-        this.viewport.insertBefore(newChild, refChild);
+        this.activeBuffer.removeLine(this.activeBuffer.scrollBottom - 1, 1, false);
+        this.activeBuffer.insertLine(this.activeBuffer.scrollTop - 1, 1);
     }
 }
 exports.Parser = Parser;

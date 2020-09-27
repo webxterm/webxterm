@@ -1,8 +1,18 @@
-import {Terminal} from "../Terminal";
+import {RenderType, Terminal} from "../Terminal";
 import {Parser} from "./Parser";
-// import {DataBlock} from "../buffer/DataBlock";
-// import {BufferLine} from "../buffer/BufferLine";
-import {DataBlockAttribute} from "../buffer/DataBlockAttribute";
+import {
+    ATTR_MODE_BOLD,
+    // ATTR_MODE_CROSSED_OUT,
+    ATTR_MODE_FAINT,
+    ATTR_MODE_INVERSE,
+    ATTR_MODE_INVISIBLE,
+    ATTR_MODE_ITALIC,
+    // ATTR_MODE_RAPID_BLINK,
+    ATTR_MODE_SLOW_BLINK,
+    ATTR_MODE_UNDERLINE,
+    ATTR_MODE_NONE,
+    DataBlockAttribute
+} from "../buffer/DataBlockAttribute";
 import {Preferences} from "../Preferences";
 import {Styles} from "../Styles";
 import {Buffer} from "../buffer/Buffer";
@@ -81,9 +91,6 @@ export class EscapeSequenceParser {
     // ---------+----------+-------------
     private _applicationCursorKeys: boolean = false;
     private _normalCursorKeys: boolean = true;
-
-    // 替换字符模式
-    private _replaceMode: boolean = true;
     // 插入字符模式
     private _insertMode: boolean = false;
     // 光标闪烁
@@ -111,10 +118,6 @@ export class EscapeSequenceParser {
         return this._normalCursorKeys;
     }
 
-    get replaceMode(): boolean {
-        return this._replaceMode;
-    }
-
     get insertMode(): boolean {
         return this._insertMode;
     }
@@ -123,9 +126,6 @@ export class EscapeSequenceParser {
     //     return this.parser.bufferSet.activeBufferLine;
     // }
 
-    get activeBufferBlocks(): string[] {
-        return this.activeBuffer.getBlocks(this.activeBuffer.y);
-    }
 
     get activeBuffer(): Buffer {
         return this.parser.bufferSet.activeBuffer;
@@ -418,7 +418,7 @@ export class EscapeSequenceParser {
                 // b'\x1b[1@E\x1b[1@e\x1b[1@Q\x1b[1@A\x1b[1@A\x1b[1@A\x1b[1@a\x1b[1@2\x1b[1@v\x1b[1@0\x1b[1@r\x1b[1@M\x1b[1@5\x1b[1@6\x1b[1@7\x1b[1@U' 
                 // 接着添加一个单引号
                 // b"\x1b[C\x1b[1@'\x08"
-                this.activeBuffer.insertBlocks(this.parser.y, this.parser.x, Buffer.newBlock(" ", this.attribute));
+                this.activeBuffer.replace(this.parser.y - 1, this.parser.x - 1, 1, this.attribute, " ");
             }
         }
 
@@ -539,7 +539,7 @@ export class EscapeSequenceParser {
     cursorForwardTabulation(params: number[]) {
         const ps = params[0] || 1;
         for (let i = 0; i < ps; i++) {
-            this.activeBuffer.replaceBlocks(this.parser.y, this.parser.x, Buffer.newBlock("\t", this.attribute));
+            this.activeBuffer.replace(this.parser.y - 1, this.parser.x - 1, 1, this.attribute, "\t");
             this.parser.x++;
         }
     }
@@ -565,8 +565,8 @@ export class EscapeSequenceParser {
 
         let begin: number = 1,
             end: number,
-            scrollBack: boolean = false,
-            fragment: DocumentFragment = document.createDocumentFragment();
+            scrollBack: boolean = false;
+            // fragment: DocumentFragment = document.createDocumentFragment();
         switch (params[0]) {
             case 1:
                 end = this.parser.y;
@@ -597,31 +597,54 @@ export class EscapeSequenceParser {
 
         }
 
+        let updateScrollViewHeight = false;
+
+        console.info("高水位：" + this.activeBuffer.high_water);
+
         for (let y = begin; y <= end; y++) {
+
+            // 比高水位还要高的话，就退出循环
+            if(y > this.activeBuffer.high_water){
+                break;
+            }
 
             if (scrollBack) {
 
                 // 删除第一行
-                const savedLines: any = this.activeBuffer.delete2(this.activeBuffer.scrollTop, 1, scrollBack);
+                this.activeBuffer.removeLine(this.activeBuffer.scrollTop - 1, 1, scrollBack);
+
                 // savedLines['dirties']
                 // savedLines['blocks']
                 // savedLines['elements']
 
-                if(savedLines['elements']){
-                    let index = 0;
-                    for(let element of savedLines['elements']){
-                        this.parser.printer.printLine(element, savedLines['blocks'][index], false);
-                        index++;
-                    }
-                }
                 // for(let savedLine of savedLines){
                 //     this.terminal.printer.printLine(savedLine, false);
                 // }
 
-                // 底部添加行
-                let line = this.activeBuffer.getBlankLine2();
-                this.activeBuffer.append2(this.activeBuffer.getBlankBlocks(), line);
-                fragment.appendChild(line);
+                if(this.terminal.renderType === RenderType.CANVAS){
+                    // 使用画板渲染
+                    // this.terminal.printer.drawLine(y, this.activeBuffer.getBlocks(y), false);
+                    if(y !== this.activeBuffer.y)
+                        if(this.terminal.textRenderer) this.terminal.textRenderer.clearLine(y);
+                    this.activeBuffer.insertLine(this.activeBuffer.scrollBottom - 1, 1);
+
+                    if(!updateScrollViewHeight) updateScrollViewHeight = true;
+                } else {
+
+                    // if(savedLines['elements']){
+                    //     let index = 0;
+                    //     for(let element of savedLines['elements']){
+                    //         this.parser.printer.printLine(element, savedLines['blocks'][index], false);
+                    //         index++;
+                    //     }
+                    // }
+                    //
+                    // // 底部添加行
+                    // let line = this.activeBuffer.getBlankLine2();
+                    // this.activeBuffer.append2(this.activeBuffer.getBlankBlocks(), line);
+                    //
+                    // fragment.appendChild(line);
+                }
 
             } else {
                 // 抹除当前行，抹除当前链数据
@@ -630,7 +653,17 @@ export class EscapeSequenceParser {
 
         }
 
-        if(scrollBack) this.parser.viewport.appendChild(fragment);
+        // if(scrollBack){
+        //     if(this.terminal.renderType === RenderType.HTML) {
+        //         this.parser.viewport.appendChild(fragment);
+        //     }
+        // }
+
+        // 重置高水位
+        this.activeBuffer.resetHighWater();
+        if(updateScrollViewHeight){
+            this.terminal.updateScrollAreaHeight();
+        }
     }
 
     /**
@@ -652,7 +685,7 @@ export class EscapeSequenceParser {
 
         let begin: number = 1,
             end: number,
-            blockSize: number = this.activeBufferBlocks.length;
+            blockSize: number = this.activeBuffer.size;
         switch (params[0]) {
             case 1:
                 end = this.parser.x;
@@ -667,7 +700,7 @@ export class EscapeSequenceParser {
         }
 
         for (let i = begin; i <= end; i++) {
-            this.activeBuffer.eraseBlock(this.parser.y, i, this.attribute);
+            this.activeBuffer.erase(this.parser.y - 1, i - 1, this.attribute);
         }
 
     }
@@ -710,7 +743,7 @@ export class EscapeSequenceParser {
     // CSI Ps P  Delete Ps Character(s) (default = 1) (DCH).
     deleteChars(params: number[]) {
         const ps = params[0] || 1;
-        this.activeBuffer.deleteBlocks(this.parser.y, this.parser.x, ps);
+        this.activeBuffer.remove(this.parser.y - 1, this.parser.x - 1, ps);
     }
 
     /**
@@ -836,7 +869,7 @@ export class EscapeSequenceParser {
     eraseChars(params: number[]) {
         const ps = params[0] || 1;
         for (let i = this.parser.x, len = this.parser.x + ps; i < len; i++) {
-            this.activeBuffer.eraseBlock(this.parser.y, i, this.attribute);
+            this.activeBuffer.erase(this.parser.y - 1, i - 1, this.attribute);
         }
 
     }
@@ -986,7 +1019,7 @@ export class EscapeSequenceParser {
      */
     // CSI Pm h  Set Mode (SM).
     //             Ps = 2  ⇒  Keyboard Action Mode (AM).
-    //             Ps = 4  ⇒  Insert Mode (IRM).
+    //             Ps = 4  ⇒  Insert Mode (IRM).    // https://vt100.net/docs/vt220-rm/chapter4.html
     //             Ps = 1 2  ⇒  Send/receive (SRM).
     //             Ps = 2 0  ⇒  Automatic Newline (LNM).
     // CSI ? Pm h
@@ -1321,8 +1354,14 @@ export class EscapeSequenceParser {
                     break;
                 case 4:
                     // Insert Mode (IRM).
+                    // Linux:
+                    // shell> echo -e '\x1b[4h'
+                    // shell> echo abcc
+                    // abc
+                    // MacOS:
+                    // bash-3.2$ echo aibcbc
+                    // aibc
                     this._insertMode = true;
-                    this._replaceMode = false;
                     break;
                 case 12:
                     break;
@@ -1364,7 +1403,7 @@ export class EscapeSequenceParser {
 
     // CSI Pm l  Reset Mode (RM).
     //             Ps = 2  ⇒  Keyboard Action Mode (AM).
-    //             Ps = 4  ⇒  Replace Mode (IRM).
+    //             Ps = 4  ⇒  Replace Mode (IRM).   // https://vt100.net/docs/vt220-rm/chapter4.html
     //             Ps = 1 2  ⇒  Send/receive (SRM).
     //             Ps = 2 0  ⇒  Normal Linefeed (LNM).
     // CSI ? Pm l
@@ -1707,7 +1746,6 @@ export class EscapeSequenceParser {
                 case 4:
                     // Replace Mode (IRM).
                     this._insertMode = false;
-                    this._replaceMode = true;
                     break;
                 case 12:
                     break;
@@ -1957,10 +1995,10 @@ export class EscapeSequenceParser {
         switch (params) {
             case 0:
                 // 重置。
-                this._attribute = new DataBlockAttribute();
+                this._attribute.reset();
                 break;
             case 1:
-                this._attribute.bold = 1;
+                this._attribute.bold = ATTR_MODE_BOLD;
                 // 加粗高亮配置
                 if (this.preferences.showBoldTextInBrightColor) {
                     if (!!this.attribute.colorClass) {
@@ -1970,56 +2008,56 @@ export class EscapeSequenceParser {
                 }
                 break;
             case 2:
-                this._attribute.faint = 1;
+                this._attribute.faint = ATTR_MODE_FAINT;
                 break;
             case 3:
-                this._attribute.italic = 1;
+                this._attribute.italic = ATTR_MODE_ITALIC;
                 break;
             case 4:
-                this._attribute.underline = 1;
+                this._attribute.underline = ATTR_MODE_UNDERLINE;
                 break;
             case 5:
-                this._attribute.slowBlink = 1;
+                this._attribute.slowBlink = ATTR_MODE_SLOW_BLINK;
                 break;
             case 6:
-                this._attribute.rapidBlink = 1;
+                // this._attribute.rapidBlink = ATTR_MODE_RAPID_BLINK;
                 break;
             case 7:
-                this._attribute.inverse = 1;
+                this._attribute.inverse = ATTR_MODE_INVERSE;
                 break;
             case 8:
-                this._attribute.invisible = 1;
+                this._attribute.invisible = ATTR_MODE_INVISIBLE;
                 break;
             case 9:
-                this._attribute.crossedOut = 1;
+                // this._attribute.crossedOut = ATTR_MODE_CROSSED_OUT;
                 break;
             case 21:
-                this._attribute.bold = 0;
+                this._attribute.bold = ATTR_MODE_NONE;
                 break;
             case 22:
-                this._attribute.bold = 0;
-                this._attribute.faint = 0;
+                this._attribute.bold = ATTR_MODE_NONE;
+                this._attribute.faint = ATTR_MODE_NONE;
                 break;
             case 23:
-                this._attribute.italic = 0;
+                this._attribute.italic = ATTR_MODE_NONE;
                 break;
             case 24:
-                this._attribute.underline = 0;
+                this._attribute.underline = ATTR_MODE_NONE;
                 break;
             case 25:
-                this._attribute.slowBlink = 0;
+                this._attribute.slowBlink = ATTR_MODE_NONE;
                 break;
             case 26:
-                this._attribute.rapidBlink = 0;
+                // this._attribute.rapidBlink = ATTR_MODE_NONE;
                 break;
             case 27:
-                this._attribute.inverse = 0;
+                this._attribute.inverse = ATTR_MODE_NONE;
                 break;
             case 28:
-                this._attribute.invisible = 0;
+                this._attribute.invisible = ATTR_MODE_NONE;
                 break;
             case 29:
-                this._attribute.crossedOut = 0;
+                // this._attribute.crossedOut = ATTR_MODE_NONE;
                 break;
             case 38:
                 // 38;5;2m

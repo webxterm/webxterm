@@ -29,6 +29,7 @@ class Preferences {
         this._fontSize = "";
         this._showBoldTextInBrightColor = false;
         this._paletteScheme = "";
+        this._paletteMap = {};
         this._terminalType = "";
         this._scrollToBottomOnInput = false;
         this._visualBell = false;
@@ -38,35 +39,41 @@ class Preferences {
         this._enableHeartbeat = false;
         this._nextHeartbeatSeconds = 0;
         this._scrollbar = false;
+        this._canvasSizeMultiple = 2;
+        this._selectionColor = "";
+        this._selectionTextColor = "";
+        this._flushInterval = 0;
         this.terminal = terminal;
         this.instanceId = terminal.instanceId;
     }
     init() {
-        this.colorScheme = "Tango dark";
+        this.colorScheme = "Solarized light";
         this.boldColor = "#FF6666";
         this.highlightColor = "#FFFFFF";
         this.highlightBackgroundColor = "#000000";
         this.transparentBackground = 0.5;
-        this.cursorShape = "Block";
+        this.cursorShape = "Wide Underline";
         this.cursorColor = "red";
         this.cursorBackgroundColor = "#FF6666";
-        this.defaultCursorColor = true;
-        this.cursorBlinking = false;
+        this.defaultCursorColor = false;
+        this.cursorBlinking = true;
         this.backgroundRepeat = true;
         this.backgroundSize = "100% 100%";
         this.fontFamily = new FreeMono_1.FreeMono();
         this.fontSize = Preferences.defaultFontSize;
-        this.showBoldTextInBrightColor = false;
-        this.paletteScheme = "Tango";
+        this.showBoldTextInBrightColor = true;
+        this.paletteScheme = "XTerm";
         this.scrollToBottomOnInput = true;
         this.visualBell = true;
         this.visualBellColor = "rgba(0,0,0,0.5)";
         this.terminalType = "xterm";
-        this.scrollBack = 51200;
+        this.scrollBack = 10240;
         this.tabSize = 8;
         this.enableHeartbeat = true;
         this.nextHeartbeatSeconds = 10;
         this.scrollbar = true;
+        this._selectionColor = "";
+        this.selectionTextColor = "";
     }
     getFonts() {
         return [
@@ -245,7 +252,7 @@ class Preferences {
         if (value) {
             Styles_1.Styles.add([".cursor.cursor-shape-block.cursor-focus.cursor-blink",
                 ".cursor.cursor-focus .outline.cursor-blink"], {
-                "animation": `cursor-blink-${this.instanceId} 1s steps(1, end) infinite;`
+                "animation": `cursor-blink-${this.instanceId} 0.4s steps(1, end) infinite;`
             }, this.instanceId);
             Styles_1.Styles.addKeyFrames("cursor-blink", "{ 0%, 50% { background-color: " + this.cursorBackgroundColor + "; color: " + this.cursorColor + "; } " +
                 "51%, 100% { background-color: transparent; color: inherit; } }", this.instanceId);
@@ -368,14 +375,18 @@ class Preferences {
         Styles_1.Styles.add(".measure", {
             "font-size": this.fontSize
         }, this.instanceId);
-        if (this.terminal.init)
+        if (this.terminal.init) {
             this.terminal.measure();
+        }
     }
     get showBoldTextInBrightColor() {
         return this._showBoldTextInBrightColor;
     }
     set showBoldTextInBrightColor(value) {
         this._showBoldTextInBrightColor = value;
+    }
+    get paletteMap() {
+        return this._paletteMap;
     }
     get paletteScheme() {
         return this._paletteScheme;
@@ -386,6 +397,8 @@ class Preferences {
         for (let i = 0, len = Preferences.paletteColorNames.length; i < len; i++) {
             const colorName = Preferences.paletteColorNames[i];
             const color = Color_1.Color.parseColor(colors[i]);
+            this._paletteMap[colorName] = colors[i];
+            this._paletteMap['_' + colorName] = colors[i];
             Styles_1.Styles.add("." + colorName, {
                 color: color + " !important"
             }, this.instanceId);
@@ -476,18 +489,12 @@ class Preferences {
     }
     set enableHeartbeat(value) {
         this._enableHeartbeat = value;
-        if (this.terminal.transceiver) {
-            this.terminal.transceiver.enableHeartbeat = value;
-        }
     }
     get nextHeartbeatSeconds() {
         return this._nextHeartbeatSeconds;
     }
     set nextHeartbeatSeconds(value) {
         this._nextHeartbeatSeconds = value;
-        if (this.terminal.transceiver) {
-            this.terminal.transceiver.nextHeartbeatSeconds = value;
-        }
     }
     set scrollbar(value) {
         this._scrollbar = value;
@@ -502,6 +509,30 @@ class Preferences {
             }, this.terminal.instanceId);
         }
     }
+    get canvasSizeMultiple() {
+        return this._canvasSizeMultiple;
+    }
+    set canvasSizeMultiple(value) {
+        this._canvasSizeMultiple = value;
+    }
+    get selectionColor() {
+        return this._selectionColor;
+    }
+    set selectionColor(value) {
+        this._selectionColor = value;
+    }
+    get selectionTextColor() {
+        return this._selectionTextColor;
+    }
+    set selectionTextColor(value) {
+        this._selectionTextColor = value;
+    }
+    get flushInterval() {
+        return this._flushInterval;
+    }
+    set flushInterval(value) {
+        this._flushInterval = value;
+    }
 }
 exports.Preferences = Preferences;
 Preferences.colorSchemes = {
@@ -514,7 +545,7 @@ Preferences.colorSchemes = {
     "Tango dark": ["#D3D7CF", "#2E3436"],
     "Solarized light": ["#657B83", "#FDF6E3"],
     "Solarized dark": ["#839496", "#002B36"],
-    "Custom": ["#839496", "#002B36"],
+    "Custom": ["#B1B1B1", "#000000"],
 };
 Preferences.cursorShapes = [
     "Block",

@@ -1,110 +1,171 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const DataBlockAttribute_1 = require("./DataBlockAttribute");
 class DataBlock {
     constructor() {
         this._data = " ";
-        this._attribute = new DataBlockAttribute_1.DataBlockAttribute();
-        this._version = 0;
-        this._href = "";
-        this._empty = false;
+        this._isEmpty = true;
+        this._length = 0;
+        this._displaySize = 1;
+        this._isDefaultAttrs = true;
+        this._colorClass = "";
+        this._backgroundColorClass = "";
+        this._className = "";
+        this._isBold = false;
+        this._isFaint = false;
+        this._isUnderline = false;
+        this._isItalic = false;
+        this._isSlowBlink = false;
+        this._isRapidBlink = false;
+        this._isInverse = false;
+        this._isInvisible = false;
+        this._isCrossedOut = false;
     }
-    static newBlock(data, attr) {
-        let block = new DataBlock();
-        block.data = data;
-        block.copyValue(attr);
-        return block;
+    static getDataBlock() {
+        if (DataBlock.instance == null) {
+            DataBlock.instance = new DataBlock();
+        }
+        else {
+            DataBlock.instance.reset();
+        }
+        return DataBlock.instance;
     }
-    static newEmptyBlock() {
-        return new DataBlock();
+    reset() {
+        if (this._data != " ")
+            this._data = " ";
+        if (!this._isEmpty)
+            this._isEmpty = true;
+        if (this._length != 0)
+            this._length = 0;
+        if (this._displaySize != 1)
+            this._displaySize = 1;
+        if (!this._isDefaultAttrs)
+            this._isDefaultAttrs = true;
+        if (this._colorClass != "")
+            this._colorClass = "";
+        if (this._backgroundColorClass != "")
+            this._backgroundColorClass = "";
+        if (this._className)
+            this._className = "";
+        if (this._isBold)
+            this._isBold = false;
+        if (this._isFaint)
+            this._isFaint = false;
+        if (this._isUnderline)
+            this._isUnderline = false;
+        if (this._isItalic)
+            this._isItalic = false;
+        if (this._isSlowBlink)
+            this._isSlowBlink = false;
+        if (this._isRapidBlink)
+            this._isRapidBlink = false;
+        if (this._isInverse)
+            this._isInverse = false;
+        if (this._isInvisible)
+            this._isInvisible = false;
+        if (this._isCrossedOut)
+            this._isCrossedOut = false;
     }
     get data() {
         return this._data;
     }
     set data(value) {
         this._data = value;
-        this._version++;
     }
-    get attribute() {
-        return this._attribute;
+    get isEmpty() {
+        return this._isEmpty;
     }
-    set attribute(value) {
-        this._attribute = value;
+    set isEmpty(value) {
+        this._isEmpty = value;
     }
-    get version() {
-        return this._version;
+    get length() {
+        return this._length;
     }
-    set version(value) {
-        this._version = value;
+    set length(value) {
+        this._length = value;
     }
-    get href() {
-        return this._href;
+    get displaySize() {
+        return this._displaySize;
     }
-    set href(value) {
-        this._href = value;
+    set displaySize(value) {
+        this._displaySize = value;
     }
-    get empty() {
-        return this._empty;
+    get colorClass() {
+        return this._colorClass;
     }
-    set empty(value) {
-        this._empty = value;
+    set colorClass(value) {
+        this._colorClass = value;
     }
-    erase(data = "", attr) {
-        let dirty = this.copyValue(attr);
-        if (data != this.data) {
-            this.data = data;
-            this.empty = false;
-            this.attribute.len2 = false;
-            if (!dirty)
-                dirty = true;
-        }
-        else {
-            this._version++;
-        }
-        return dirty;
+    get backgroundColorClass() {
+        return this._backgroundColorClass;
     }
-    copyValue(attr) {
-        const version = this._attribute.version;
-        this._attribute.backgroundColorClass = attr.backgroundColorClass;
-        this._attribute.colorClass = attr.colorClass;
-        this._attribute.bold = attr.bold;
-        this._attribute.crossedOut = attr.crossedOut;
-        this._attribute.inverse = attr.inverse;
-        this._attribute.inverse = attr.inverse;
-        this._attribute.invisible = attr.invisible;
-        this._attribute.italic = attr.italic;
-        this._attribute.len2 = attr.len2;
-        this._attribute.rapidBlink = attr.rapidBlink;
-        this._attribute.slowBlink = attr.slowBlink;
-        this._attribute.underline = attr.underline;
-        return version != this._attribute.version;
+    set backgroundColorClass(value) {
+        this._backgroundColorClass = value;
     }
-    getClassName() {
-        let value = [
-            this._attribute.backgroundColorClass,
-            this._attribute.colorClass
-        ];
-        if (this._attribute.bold)
-            value.push("bold");
-        if (this._attribute.crossedOut)
-            value.push("crossed-out");
-        if (this._attribute.inverse)
-            value.push("inverse");
-        if (this._attribute.invisible)
-            value.push("invisible");
-        if (this._attribute.italic)
-            value.push("italic");
-        if (this._attribute.len2)
-            value.push("len2");
-        if (this._attribute.rapidBlink)
-            value.push("rapid-blink");
-        if (this._attribute.slowBlink)
-            value.push("slow-blink");
-        if (this._attribute.underline)
-            value.push("underline");
-        if (this._attribute.faint)
-            value.push("faint");
-        return value.join(" ").trim();
+    get isBold() {
+        return this._isBold;
+    }
+    set isBold(value) {
+        this._isBold = value;
+    }
+    get isFaint() {
+        return this._isFaint;
+    }
+    set isFaint(value) {
+        this._isFaint = value;
+    }
+    get isUnderline() {
+        return this._isUnderline;
+    }
+    set isUnderline(value) {
+        this._isUnderline = value;
+    }
+    get isItalic() {
+        return this._isItalic;
+    }
+    set isItalic(value) {
+        this._isItalic = value;
+    }
+    get isSlowBlink() {
+        return this._isSlowBlink;
+    }
+    set isSlowBlink(value) {
+        this._isSlowBlink = value;
+    }
+    get isRapidBlink() {
+        return this._isRapidBlink;
+    }
+    set isRapidBlink(value) {
+        this._isRapidBlink = value;
+    }
+    get isInverse() {
+        return this._isInverse;
+    }
+    set isInverse(value) {
+        this._isInverse = value;
+    }
+    get isInvisible() {
+        return this._isInvisible;
+    }
+    set isInvisible(value) {
+        this._isInvisible = value;
+    }
+    get isCrossedOut() {
+        return this._isCrossedOut;
+    }
+    set isCrossedOut(value) {
+        this._isCrossedOut = value;
+    }
+    get isDefaultAttrs() {
+        return this._isDefaultAttrs;
+    }
+    set isDefaultAttrs(value) {
+        this._isDefaultAttrs = value;
+    }
+    get className() {
+        return this._className;
+    }
+    set className(value) {
+        this._className = value;
     }
 }
 exports.DataBlock = DataBlock;

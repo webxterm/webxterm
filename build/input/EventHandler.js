@@ -1,9 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const Keyboard_1 = require("./Keyboard");
+const Terminal_1 = require("../Terminal");
 const CommonUtils_1 = require("../common/CommonUtils");
 const Styles_1 = require("../Styles");
-const Composition_1 = require("./Composition");
+const CanvasSelection_1 = require("../CanvasSelection");
+const InputEvent_1 = require("./InputEvent");
 var FocusTarget;
 (function (FocusTarget) {
     FocusTarget[FocusTarget["UNDEFINED"] = 0] = "UNDEFINED";
@@ -16,7 +18,6 @@ class EventHandler {
         this.selectionContent = "";
         this.selectionRanges = [];
         this.quickSelectAll = false;
-        this.composing = new Composition_1.Composition();
     }
     getSelection() {
         let sel = window.getSelection();
@@ -38,11 +39,13 @@ class EventHandler {
         }
         return false;
     }
-    listen(terminal) {
+    listen(t) {
         const defaultOption = { preventScroll: true };
         let focusTarget = FocusTarget.UNDEFINED;
-        let container = terminal.container;
-        let clipboard = terminal.clipboard;
+        let container = t.container;
+        let clipboard = t.clipboard;
+        let selection = t.selection;
+        new InputEvent_1.InputEvent(clipboard, t).initCompositionEvents().initKeydownEvent();
         container.addEventListener("click", (e) => {
             this.quickSelectAll = false;
             if (this.getSelection().length === 0) {
@@ -51,15 +54,14 @@ class EventHandler {
         });
         container.addEventListener("paste", (e) => {
             clipboard.focus();
-            terminal.scrollToBottom();
+            t.scrollToBottom();
             if (e.clipboardData) {
                 let text = e.clipboardData.getData('text');
-                this.sendMessage(terminal, {
-                    "cmd": text.replace(/\n|\r\n/gi, '\x0d')
-                });
+                this.sendMessage(t, text.replace(/\n|\r\n/gi, '\x0d'));
             }
         });
         container.addEventListener("mousedown", (e) => {
+            console.info('container...mousedown....', e);
             switch (e.button) {
                 case 0:
                     focusTarget = FocusTarget.CONTAINER;
@@ -67,59 +69,63 @@ class EventHandler {
                     return;
                 case 1:
                     e.preventDefault();
-                    this.sendMessage(terminal, {
-                        "cmd": this.selectionContent
-                    });
+                    this.sendMessage(t, this.selectionContent);
                     clipboard.focus();
                     break;
                 case 2:
                     if (this.quickSelectAll) {
                         break;
                     }
-                    if (!this.isFocusSelectionRanges(e)) {
-                        console.info('isFocusSelectionRanges => false');
-                        console.info(e.target);
-                        let target = e.target, x = e.pageX - terminal.container.getBoundingClientRect().left, y = 0, h = terminal.charHeight;
-                        if (target === terminal.container) {
-                            y = e.pageY - (e.pageY % terminal.charHeight);
-                        }
-                        else if (target === terminal.presentation) {
-                            y = target.offsetTop;
-                            h = target.getBoundingClientRect().height;
-                        }
-                        else if (CommonUtils_1.CommonUtils.hasClass(target, 'viewport-row')) {
-                            y = target.offsetTop;
-                        }
-                        else {
-                            if (target.nodeName && target.nodeName.toUpperCase() == "SPAN") {
-                                if (target.parentElement
-                                    && CommonUtils_1.CommonUtils.hasClass(target.parentElement, 'viewport-row')) {
-                                    y = target.offsetTop;
+                    if (t.renderType == Terminal_1.RenderType.CANVAS) {
+                        let target = e.target, x, y = 0, h = t.charHeight;
+                        let layerY = e.clientY - cursorViewRect.top, height = t.charHeight;
+                        x = e.clientX - cursorViewRect.left;
+                        y = Math.floor(layerY / height) * height + parseInt(t.viewport.style.marginTop);
+                        Styles_1.Styles.add(".clipboard", {
+                            position: "absolute",
+                            left: (x - t.charWidth / 2) + "px",
+                            top: y + "px",
+                            height: h + "px",
+                            width: (target.getBoundingClientRect().width - x) + "px"
+                        }, t.instanceId);
+                    }
+                    else if (t.renderType == Terminal_1.RenderType.HTML) {
+                        if (!this.isFocusSelectionRanges(e)) {
+                            console.info('isFocusSelectionRanges => false');
+                            console.info(e.target);
+                            let target = e.target, x = e.pageX - t.container.getBoundingClientRect().left, y = 0, h = t.charHeight;
+                            if (target === t.container) {
+                                y = e.pageY - (e.pageY % t.charHeight);
+                            }
+                            else if (target === t.presentation) {
+                                y = target.offsetTop;
+                                h = target.getBoundingClientRect().height;
+                            }
+                            else if (CommonUtils_1.CommonUtils.hasClass(target, 'viewport-row')) {
+                                y = target.offsetTop;
+                            }
+                            else {
+                                if (target.nodeName && target.nodeName.toUpperCase() == "SPAN") {
+                                    if (target.parentElement
+                                        && CommonUtils_1.CommonUtils.hasClass(target.parentElement, 'viewport-row')) {
+                                        y = target.offsetTop;
+                                    }
+                                    else {
+                                        break;
+                                    }
                                 }
                                 else {
                                     break;
                                 }
                             }
-                            else {
-                                break;
-                            }
-                        }
-                        Styles_1.Styles.add(".clipboard", {
-                            position: "absolute",
-                            left: (x - terminal.charWidth / 2) + "px",
-                            top: y + "px",
-                            height: h + "px",
-                            width: (target.getBoundingClientRect().width - x) + "px"
-                        }, terminal.instanceId);
-                        setTimeout(() => {
                             Styles_1.Styles.add(".clipboard", {
-                                position: "",
-                                left: "",
-                                top: "",
-                                height: "",
-                                width: ""
-                            }, terminal.instanceId);
-                        }, 100);
+                                position: "absolute",
+                                left: (x - t.charWidth / 2) + "px",
+                                top: y + "px",
+                                height: h + "px",
+                                width: (target.getBoundingClientRect().width - x) + "px"
+                            }, t.instanceId);
+                        }
                     }
                     break;
                 case 3:
@@ -128,7 +134,8 @@ class EventHandler {
                     break;
             }
         });
-        container.addEventListener('mouseup', () => {
+        container.addEventListener('mouseup', (e) => {
+            console.info('container...mouseup....', e);
             const selectionContent = this.getSelection();
             if (!!selectionContent) {
                 this.selectionContent = selectionContent;
@@ -137,6 +144,7 @@ class EventHandler {
             }
         });
         document.addEventListener("keydown", (e) => {
+            console.info('document...keydown....', e);
             if (e.key === "Alt"
                 || e.key === "Control"
                 || e.key === "Shift"
@@ -144,162 +152,12 @@ class EventHandler {
                 || e.altKey) {
                 return;
             }
-            let keySym = this.keyboard.getKeySym(e, terminal.esParser.applicationCursorKeys, terminal.parser.applicationKeypad);
-            this.sendMessage(terminal, {
-                "cmd": keySym
-            });
+            let keySym = this.keyboard.getKeySym(e, t.esParser.applicationCursorKeys, t.parser.applicationKeypad);
+            this.sendMessage(t, keySym);
             clipboard.focus();
-        });
-        clipboard.addEventListener('keydown', (e) => {
-            this.quickSelectAll = false;
-            if (e.metaKey) {
-                let key = e.key.toLowerCase();
-                if ("cv".indexOf(key) !== -1) {
-                    return;
-                }
-                else if ('a' === key) {
-                    this.quickSelectAll = true;
-                    clipboard.blur();
-                    return;
-                }
-            }
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.which === 229 || e.keyCode == 229) {
-                const key = e.key;
-                if (key == "Process") {
-                    return;
-                }
-                if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(key)) {
-                }
-                else {
-                    switch (this.composing.state) {
-                        case 0:
-                            this.composing.reset();
-                            this.composing.update = key;
-                            this.composing.state = 1;
-                            this.composing.running = true;
-                            compositionElement = document.createElement("span");
-                            compositionElement.className = "composition2";
-                            compositionElement.innerHTML = this.composing.update;
-                            let currentElement = terminal.cursor.currentElement;
-                            if (currentElement && currentElement.parentElement) {
-                                currentElement.parentElement.insertBefore(compositionElement, currentElement);
-                            }
-                            break;
-                        case 1:
-                            this.composing.state = 2;
-                        case 2:
-                            this.composing.update = this.composing.update + key;
-                            compositionElement.innerHTML = this.composing.update;
-                            break;
-                        case 3:
-                            this.composing.end = key;
-                            compositionElement.innerHTML = this.composing.end;
-                            this.sendMessage(terminal, {
-                                "cmd": this.composing.end
-                            });
-                            this.composing.reset();
-                            compositionElement.remove();
-                            break;
-                    }
-                    return;
-                }
-            }
-            else if (!this.composing.events && this.composing.running) {
-                if (e.key == "Backspace") {
-                    this.composing.running = false;
-                    this.composing.update = "";
-                    this.composing.done = true;
-                    this.composing.state = 3;
-                }
-                else if (e.key == "Enter") {
-                    this.composing.end = this.composing.update;
-                    compositionElement.innerHTML = this.composing.end;
-                    this.composing.running = false;
-                    this.composing.update = "";
-                    this.composing.done = true;
-                    this.composing.state = 3;
-                    this.sendMessage(terminal, {
-                        "cmd": this.composing.end
-                    });
-                    this.composing.reset();
-                    compositionElement.remove();
-                }
-                return;
-            }
-            let keySym = this.keyboard.getKeySym(e, terminal.esParser.applicationCursorKeys, terminal.parser.applicationKeypad);
-            this.sendMessage(terminal, {
-                "cmd": keySym
-            });
-            if (terminal.bufferSet.activeBuffer.currentLineNum >= terminal.rows
-                && !terminal.enableScrollToBottom) {
-                terminal.enableScrollToBottom = true;
-            }
         });
         clipboard.addEventListener("contextmenu", () => {
             clipboard.focus();
-        });
-        let compositionElement, compositionBlinkingTimer = 0;
-        clipboard.addEventListener("compositionstart", (e) => {
-            if (e instanceof CompositionEvent) {
-                this.composing.reset();
-                this.composing.events = true;
-                this.composing.update = e.data;
-                this.composing.running = true;
-                this.composing.state = 1;
-                console.info(JSON.stringify(this.composing));
-                compositionElement = document.createElement("span");
-                compositionElement.className = "composition";
-                compositionElement.innerHTML = this.composing.update;
-                let currentElement = terminal.cursor.currentElement;
-                if (currentElement && currentElement.parentElement) {
-                    currentElement.parentElement.insertBefore(compositionElement, currentElement);
-                }
-                terminal.hideCursor();
-            }
-        });
-        clipboard.addEventListener('compositionupdate', (e) => {
-            if (e instanceof CompositionEvent) {
-                this.composing.update = e.data;
-                this.composing.state = 2;
-                console.info(JSON.stringify(this.composing));
-                if (compositionElement) {
-                    compositionElement.innerHTML = this.composing.update;
-                    CommonUtils_1.CommonUtils.addClass(compositionElement, "running");
-                    if (!!compositionBlinkingTimer) {
-                        return;
-                    }
-                    compositionBlinkingTimer = setTimeout(() => {
-                        CommonUtils_1.CommonUtils.removeClass(compositionElement, "running");
-                        clearTimeout(compositionBlinkingTimer);
-                        compositionBlinkingTimer = 0;
-                    }, 1200);
-                }
-            }
-        });
-        clipboard.addEventListener('compositionend', (e) => {
-            if (e instanceof CompositionEvent) {
-                this.composing.update = "";
-                this.composing.done = true;
-                this.composing.running = false;
-                this.composing.end = e.data;
-                this.composing.state = 3;
-                console.info(JSON.stringify(this.composing));
-                if (compositionElement) {
-                    compositionElement.innerHTML = this.composing.end;
-                    terminal.showCursor();
-                    this.sendMessage(terminal, {
-                        "cmd": e.data
-                    });
-                    this.composing.reset();
-                    compositionElement.remove();
-                }
-            }
-        });
-        container.addEventListener('scroll', (e) => {
-            let target = e.target;
-            terminal.enableScrollToBottom = target.scrollTop + target.getBoundingClientRect().height + 15 >= target.scrollHeight;
         });
         let resizingTimer = 0, blurTimer = 0;
         clipboard.addEventListener('focus', (e) => {
@@ -311,14 +169,31 @@ class EventHandler {
             e.preventDefault();
             console.info('获取焦点');
             window.scrollTo(0, 0);
-            terminal.focus();
-            clipboard.value = '';
-            focusTarget = FocusTarget.CLIPBOARD;
+            if (t.renderType === Terminal_1.RenderType.CANVAS) {
+                setTimeout(() => {
+                    if (t.cursorRenderer)
+                        t.cursorRenderer.drawCursor();
+                });
+            }
+            else if (t.renderType === Terminal_1.RenderType.HTML) {
+                t.focus();
+                clipboard.value = '';
+                focusTarget = FocusTarget.CLIPBOARD;
+            }
         });
         clipboard.focus(defaultOption);
         window.addEventListener('blur', () => {
-            focusTarget = FocusTarget.UNDEFINED;
-            terminal.blur();
+            if (t.renderType === Terminal_1.RenderType.CANVAS) {
+                setTimeout(() => {
+                    if (t.cursorRenderer)
+                        t.cursorRenderer.cursorBlur();
+                });
+            }
+            else if (t.renderType === Terminal_1.RenderType.HTML) {
+                focusTarget = FocusTarget.UNDEFINED;
+                console.info('失去焦点');
+                t.blur();
+            }
         });
         window.onresize = () => {
             if (!!resizingTimer) {
@@ -326,55 +201,165 @@ class EventHandler {
                 resizingTimer = 0;
             }
             resizingTimer = setTimeout(() => {
-                if (terminal.eventMap["resize"])
-                    terminal.eventMap["resize"]();
-                terminal.resizeWindow();
+                if (t.eventMap["resize"])
+                    t.eventMap["resize"]();
+                t.resizeWindow();
                 clearTimeout(resizingTimer);
                 resizingTimer = 0;
             }, 100);
         };
-    }
-    paste(data, clipboard, terminal) {
-        if (!!data && terminal.transceiver) {
-            if (!(terminal.parser.applicationKeypad
-                || terminal.esParser.applicationCursorKeys
-                || terminal.bufferSet.isAlt)) {
-                if (data === "\x0d") {
-                    terminal.eventLog.add();
-                }
-                else {
-                    terminal.eventLog.append(data);
-                }
+        let cursorViewRect = t.cursorView.getBoundingClientRect();
+        let clickTime = [];
+        let clickPoints = [];
+        function calcPointX(layerX) {
+            const width = (t.textRenderer) ? t.textRenderer.measuredTextWidth : 0;
+            const xMod = layerX * 2 % width;
+            let x = Math.floor(layerX * 2 / width) * width;
+            if (xMod > width / 2) {
+                x += width;
             }
-            terminal.transceiver.send(JSON.stringify({
-                "cmd": data
-            }));
+            return x;
         }
-        else if (!terminal.transceiver || !terminal.transceiver.connected) {
-            console.info("clipboard.keySym:" + data);
-            switch (data) {
-                case "\x0d":
-                    terminal.echo("\r\n" + terminal.prompt);
-                    break;
-                case "\x7f":
-                    if (terminal.bufferSet.activeBuffer.x >= terminal.prompt.length) {
-                        terminal.echo("\x08\x1b[P");
+        function calcPointY(layerY) {
+            const height = (t.textRenderer) ? t.textRenderer.height : 0;
+            return Math.floor(layerY * 2 / height) * height;
+        }
+        t.scrollView.addEventListener("mousedown", (e) => {
+            console.info("terminal。。。mousedown。。。", e);
+            switch (e.buttons) {
+                case 1:
+                    if (!selection.enable)
+                        selection.enable = true;
+                    let x = e.clientX - cursorViewRect.left, y = e.clientY - cursorViewRect.top;
+                    let offsetTop = t.getOffsetTop();
+                    if (e.shiftKey) {
+                        selection.stop(calcPointX(x), calcPointY(y), offsetTop);
+                        if (t.selectionRenderer)
+                            t.selectionRenderer.select(selection);
                     }
                     else {
-                        terminal.echo("\x07");
+                        if (t.selectionRenderer)
+                            t.selectionRenderer.clearSelected(selection);
+                        if (selection.selectAll) {
+                            selection.selectAll = false;
+                            if (t.textRenderer)
+                                t.textRenderer.flushLines(t.textRenderer.getDisplayBuffer(), false);
+                        }
+                        console.info("offsetTop:" + offsetTop);
+                        selection.start(calcPointX(x), calcPointY(y), offsetTop);
+                        const now = new Date().getTime();
+                        switch (clickTime.length) {
+                            case 1:
+                                if ((now - clickTime[0]) < 500) {
+                                    clickPoints.push(new CanvasSelection_1.SelectionPoint(x, y));
+                                    if (CommonUtils_1.CommonUtils.isSamePoint(clickPoints[0], clickPoints[1])) {
+                                        console.info("双击。。。。");
+                                        console.info(clickPoints);
+                                        selection.stop(calcPointX(x), calcPointY(y), offsetTop);
+                                        if (t.selectionRenderer)
+                                            t.selectionRenderer.selectBlock(selection);
+                                        clickTime.push(now);
+                                        break;
+                                    }
+                                }
+                                clickTime = [now];
+                                clickPoints = [new CanvasSelection_1.SelectionPoint(x, y)];
+                                break;
+                            case 2:
+                                if ((now - clickTime[1]) < 500
+                                    && (clickTime[1] - clickTime[0]) < 500) {
+                                    clickPoints.push(new CanvasSelection_1.SelectionPoint(x, y));
+                                    if (CommonUtils_1.CommonUtils.isSamePoint(clickPoints[0], clickPoints[1])
+                                        && CommonUtils_1.CommonUtils.isSamePoint(clickPoints[1], clickPoints[2])) {
+                                        console.info("三击。。。。");
+                                        console.info(clickPoints);
+                                        selection.stop(calcPointX(x), calcPointY(y), offsetTop);
+                                        if (t.selectionRenderer)
+                                            t.selectionRenderer.selectLine(selection);
+                                        break;
+                                    }
+                                }
+                                clickTime = [now];
+                                clickPoints = [new CanvasSelection_1.SelectionPoint(x, y)];
+                                break;
+                            default:
+                                clickTime = [now];
+                                clickPoints = [new CanvasSelection_1.SelectionPoint(x, y)];
+                        }
+                    }
+                    console.info(e);
+                    break;
+                case 2:
+                    selection.enable = false;
+                    break;
+            }
+        });
+        container.addEventListener("mousemove", (e) => {
+            if (e.buttons == 0)
+                return;
+            switch (e.buttons) {
+                case 1:
+                    if (t.renderType == Terminal_1.RenderType.CANVAS
+                        && selection.enable) {
+                        let x = e.clientX - cursorViewRect.left, y = e.clientY - cursorViewRect.top;
+                        selection.stop(calcPointX(x), calcPointY(y));
+                        if (t.selectionRenderer)
+                            t.selectionRenderer.select(selection);
                     }
                     break;
-                case "\x1b[A":
-                case "\x1b[B":
-                    terminal.echo("\x07");
+                case 2:
                     break;
-                default:
-                    terminal.echo(data);
+                case 4:
+                    break;
+                case 8:
+                    break;
+                case 16:
+                    break;
             }
-        }
+        });
+        let pending_flush_buf, refresh, is_draw_cursor;
+        t.scrollView.addEventListener("scroll", (e) => {
+            if (t.textRenderer && t.textRenderer.hitFlushLines()) {
+                console.info("命中缓存。。。");
+                return;
+            }
+            console.info(e);
+            if (t.textRenderer)
+                pending_flush_buf = t.textRenderer.getDisplayBuffer();
+            refresh = false;
+            is_draw_cursor = true;
+            for (let i = 0, len = pending_flush_buf.lines.length; i < len; i++) {
+                if (!refresh && pending_flush_buf.lines[i] != t.bufferSet.activeBuffer.display_buffer.lines[i]) {
+                    refresh = true;
+                }
+                if (is_draw_cursor && t.bufferSet.activeBuffer.change_buffer.lines[i] != pending_flush_buf.lines[i]) {
+                    is_draw_cursor = false;
+                }
+                if (refresh && !is_draw_cursor) {
+                    break;
+                }
+            }
+            t.cursor.show = is_draw_cursor;
+            if (refresh) {
+                if (t.textRenderer)
+                    t.textRenderer.flushLines(pending_flush_buf, true);
+            }
+            else {
+                if (t.cursor.show) {
+                    if (t.cursorRenderer)
+                        t.cursorRenderer.drawCursor();
+                }
+            }
+        });
     }
-    sendMessage(terminal, data) {
-        terminal.transceiver.send(JSON.stringify(data));
+    sendMessage(t, data) {
+        if (data.length > 0) {
+            let presentation = JSON.stringify({
+                cmd: data
+            });
+            console.info("发送的内容：" + presentation);
+            t.transceiver.send(presentation);
+        }
     }
 }
 exports.EventHandler = EventHandler;

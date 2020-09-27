@@ -10,5 +10,8 @@ class Font {
     getFontName() {
         return "";
     }
+    getLineHeight() {
+        return 1;
+    }
 }
 exports.Font = Font;

@@ -21,7 +21,7 @@
 
 
     <link rel="stylesheet" href="../css/terminal.css?version=1.3">
-    <script type="text/javascript" src="../dist/webxterm.js?version=1.84"></script>
+    <script type="text/javascript" src="../dist/webxterm.js?version=1.90"></script>
     <style>
         .key-item {
             width: 36px;
@@ -38,12 +38,16 @@
             margin-right: 7px;
         }
 
+        /*html, body{*/
+        /*    overflow-y: scroll*/
+        /*}*/
+
     </style>
 </head>
 <body>
 
-    <div style="display: flex; ">
-        <div id="test" style="width: 100vw; height: 100vh;"></div>
+    <div>
+        <div id="test" style="width: calc(100vw - 0px); height: calc(100vh - 0px); margin: 0px; "></div>
 <!--        <div id="test2" style="width: 50vw; height: 100vh; background-color: red;"></div>-->
 
     </div>
@@ -62,6 +66,8 @@
         // wsServer: "ws://a.baikai.top:8899",
         // wsServer: "ws://192.168.0.100:8899",
         wsServer: "ws://127.0.0.1:8899",
+        // wsServer: "ws://master.webxterm.com",
+        margin: 0,
         render: (args) => {
             console.info(args.instance);
         }
@@ -72,21 +78,140 @@
         updateTitle: (title) => {
             document.title = title;
             console.info("updateTitle:" + title);
-        }
-    }).open(
+        },
+        connect: (status, message) => {
+            if(status != "success") alert(message);
+        },
+    })
+    .open(
         // '192.168.0.109',
         // 'baikai',
         // 'x+y-1=0?x&y',
         // 22
         // '103.106.245.117', 'root', '2730e5499c', 2025
-        // '192.168.46.133', 'baikai', 'baikai#1234', 22
+        // '192.168.3.101', 'baikai', 'x+y-1=0?x&y', 22
+        'www.webdba.cn', 'baikai', 'x+y-1=0?x&y', 2025
         // '182.61.55.239', 'root', 'baikai#1234', 2025
         // '127.0.0.1', 'fei00', '0000', 22
-        "a.baikai.top", "baikai", "x+y-1=0?x&y", 2025
+        // "a.baikai.top", "baikai", "x+y-1=0?x&y", 2025
         // "baikai.tpddns.cn", "root", "baikai#1234", 2025
         // "192.168.46.124", "root", "x+y-1=0?x&y", 22
         // "192.168.46.114", "root", "x+y-1=0?x&y", 22
+        // "192.168.46.149", "root", "oracle", 22
     );
+
+    // terminal.preferences.fontSize = "8pt";
+
+    /**
+    terminal.write('\x1b[?2004l\r\r\n'
+
+    );terminal.write('lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384\r\n\toptions=1203<RXCSUM,TXCSUM,TXSTATUS,SW_TIMESTAMP>\r\n\tinet 127.0.0.1 netmask 0xff000000 \r\n'
+
+    );terminal.write('\tinet6 ::1 prefixlen 128 \r\n'
+
+    );terminal.write('\tinet6 fe80::1%lo0 prefixlen 64 scopeid 0x1 \r\n'
+
+    );terminal.write('\tnd6 options=201<PERFORMNUD,DAD>\r\ngif0: flags=8010<POINTOPOINT,MULTICAST> mtu 1280\r\n'
+
+    );terminal.write('stf0: flags=0<> mtu 1280\r\nen5: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\r\n\tether ac:de:48:00:11:22 \r\n\tinet6 fe80::aede:48ff:fe00:1122%en5 prefixlen 64 scopeid 0x4 \r\n\tnd6 options=201<PERFORMNUD,DAD>\r\n\tmedia: autoselect (100baseTX <full-duplex>)\r\n\tstatus: active\r\nap1: flags=8802<BROADCAST,SIMPLEX,MULTICAST> mtu 1500\r\n\toptions=400<CHANNEL_IO>\r\n\tether a6:83:e7:4e:a1:86 \r\n\tmedia: autoselect\r\n\tstatus: inactive\r\nen0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\r\n\toptions=400<CHANNEL_IO>\r\n\tether a4:83:e7:4e:a1:86 \r\n\tinet6 fe80::a5:86b4:7e29:ee4%en0 prefixlen 64 secured scopeid 0x6 \r\n\tinet 192.168.3.109 netmask 0xffffff00 broadcast 192.168.3.255\r\n\tnd6 options=201<PERFORMNUD,DAD>\r\n'
+
+    );terminal.write('\tmedia: autoselect\r\n\tstatus: active\r\n'
+
+    );terminal.write('en1: flags=8963<UP,BROADCAST,SMART,RUNNING,PROMISC,SIMPLEX,MULTICAST> mtu 1500\r\n\toptions=460<TSO4,TSO6,CHANNEL_IO>\r\n\tether 82:1c:fe:60:88:01 \r\n\tmedia: autoselect <full-duplex>\r\n\tstatus: inactive\r\nen2: flags=8963<UP,BROADCAST,SMART,RUNNING,PROMISC,SIMPLEX,MULTICAST> mtu 1500\r\n\toptions=460<TSO4,TSO6,CHANNEL_IO>\r\n\tether 82:1c:fe:60:88:00 \r\n\tmedia: autoselect <full-duplex>\r\n\tstatus: inactive\r\nen3: flags=8963<UP,BROADCAST,SMART,RUNNING,PROMISC,SIMPLEX,MULTICAST> mtu 1500\r\n\toptions=460<TSO4,TSO6,CHANNEL_IO>\r\n\tether 82:1c:fe:60:88:05 \r\n\tmedia: autoselect <full-duplex>\r\n\tstatus: inactive\r\nen4: flags=8963<UP,BROADCAST,SMART,RUNNING,PROMISC,SIMPLEX,MULTICAST> mtu 1500\r\n\toptions=460<TSO4,TSO6,CHANNEL_IO>\r\n'
+
+    );terminal.write('\tether 82:1c:fe:60:88:04 \r\n'
+
+    );terminal.write('\tmedia: autoselect <full-duplex>\r\n\tstatus: inactive\r\n'
+
+    );terminal.write('bridge0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\r\n\toptions=63<RXCSUM,TXCSUM,TSO4,TSO6>\r\n\tether 82:1c:fe:60:88:01 \r\n'
+
+    );terminal.write('\tConfiguration:\r\n\t\tid 0:0:0:0:0:0 priority 0 hellotime 0 fwddelay 0\r\n\t\tmaxage 0 holdcnt 0 proto stp maxaddr 100 timeout 1200\r\n\t\troot id 0:0:0:0:0:0 priority 0 ifcost 0 port 0\r\n'
+
+    );terminal.write('\t\tipfilter disabled flags 0x0\r\n\tmember: en1 flags=3<LEARNING,DISCOVER>\r\n\t        ifmaxaddr 0 port 7 priority 0 path cost 0\r\n'
+
+    );terminal.write('\tmember: en2 flags=3<LEARNING,DISCOVER>\r\n\t        ifmaxaddr 0 port 8 priority 0 path cost 0\r\n\tmember: en3 flags=3<LEARNING,DISCOVER>\r\n\t        ifmaxaddr 0 port 9 priority 0 path cost 0\r\n\tmember: en4 flags=3<LEARNING,DISCOVER>\r\n\t        ifmaxaddr 0 port 10 priority 0 path cost 0\r\n\tnd6 options=201<PERFORMNUD,DAD>\r\n'
+
+    );terminal.write('\tmedia: <unknown type>\r\n\tstatus: inactive\r\n'
+
+    );terminal.write('p2p0: flags=8843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST> mtu 2304\r\n\toptions=400<CHANNEL_IO>\r\n\tether 06:83:e7:4e:a1:86 \r\n'
+
+    );terminal.write('\tmedia: autoselect\r\n\tstatus: inactive\r\n'
+
+    );terminal.write('awdl0: flags=8943<UP,BROADCAST,RUNNING,PROMISC,SIMPLEX,MULTICAST> mtu 1484\r\n\toptions=400<CHANNEL_IO>\r\n\tether c2:aa:55:d0:a6:db \r\n'
+
+    );terminal.write('\tinet6 fe80::c0aa:55ff:fed0:a6db%awdl0 prefixlen 64 scopeid 0xd \r\n\tnd6 options=201<PERFORMNUD,DAD>\r\n'
+
+    );terminal.write('\tmedia: autoselect\r\n\tstatus: active\r\n'
+
+    );terminal.write('llw0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\r\n\toptions=400<CHANNEL_IO>\r\n'
+
+    );terminal.write('\tether c2:aa:55:d0:a6:db \r\n\tinet6 fe80::c0aa:55ff:fed0:a6db%llw0 prefixlen 64 scopeid 0xe \r\n'
+
+    );terminal.write('\tnd6 options=201<PERFORMNUD,DAD>\r\n\tmedia: autoselect\r\n\tstatus: active\r\n'
+
+    );terminal.write('utun0: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1380\r\n\tinet6 fe80::e470:b5db:1a2c:71ff%utun0 prefixlen 64 scopeid 0xf \r\n'
+
+    );terminal.write('\tnd6 options=201<PERFORMNUD,DAD>\r\nutun1: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 2000\r\n'
+
+    );terminal.write('\tinet6 fe80::48c0:7d4d:6206:a389%utun1 prefixlen 64 scopeid 0x10 \r\n\tnd6 options=201<PERFORMNUD,DAD>\r\n'
+
+    );terminal.write('utun2: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1380\r\n\tinet6 fe80::addc:4c86:8b03:b4b1%utun2 prefixlen 64 scopeid 0x11 \r\n'
+
+    );terminal.write('\tnd6 options=201<PERFORMNUD,DAD>\r\n'
+
+    );terminal.write('utun3: flags=8051中文来了。。。。<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1380\r\n'
+
+    );terminal.write('\tinet6 fe80::f601:9596:46b6:edda%utun3 prefixlen 64 scopeid 0x12 \r\n'
+
+    );terminal.write('\tnd6 options=201<PERFORMNUD,DAD>\r\n'
+
+    );terminal.write('utun4: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1380\r\n'
+
+    );terminal.write('\tinet6 fe80::a1ef:d5bd:8019:fa09%utun4 prefixlen 64 scopeid 0x15 \r\n'
+
+    );terminal.write('\tnd6 options=201<PERFORMNUD,DAD>\r\nutun5: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1380\r\n'
+
+    );terminal.write('\tinet6 fe80::c550:8440:5042:9a5a%utun5 prefixlen 64 scopeid 0x16 \r\n\tnd6 options=201<PERFORMNUD,DAD>\r\n'
+
+    );terminal.write('\x1b[1m\x1b[7m%\x1b[27m\x1b[1m\x1b[0m                                                                                                                                                                                \r \r'
+
+    );terminal.write('\r\x1b[0m\x1b[27m\x1b[24m\x1b[Jfei00@baikai ~ % \x1b[K\x1b[?2004h');
+
+    terminal.write("<asndvsdvjsdnvjsdnvsd,s,dvsdjvsdnv");
+    */
+
+    // terminal.write('Last login: Tue Aug  4 13:21:07 2020 from 101.32.19.85\r\r\n');
+    // terminal.write('\x1b]0;root@liaobaikai:~\x07\x1b[?1034h[root@liaobaikai ~]#1 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#2 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#3 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#4 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#5 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#6 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#7 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#8 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#9 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#10 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#11 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#12 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#13 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#14 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#15 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#16 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#17 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#18 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#19 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#20 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#21 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#22 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#23 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#24 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#25 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#26 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#27 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#28 ');
+    // terminal.write('\r\n\x1b]0;root@liaobaikai:~\x07[root@liaobaikai ~]#29 ');
+    // terminal.write('\x1b[1m\x1b[7m%\x1b[27m\x1b[1m\x1b[0m                                                                               \r \r');
+    // terminal.write('\r\x1b[0m\x1b[27m\x1b[24m\x1b[Jfei00@baikai ~ % \x1b[K\x1b[?2004h');
 
 
     function download() {
@@ -105,6 +230,8 @@
             alert(keyItem.innerHTML);
         });
     }
+
+    // "\u001b[22D?\u001b[7m<\u001b[7m0\u001b[7m0\u001b[7ma\u001b[7md\u001b[7m>\u001b[27m?\u001b[7m<\u001b[7m0\u001b[7m0\u001b[7m9\u001b[7m6\u001b[7m>\u001b[27m\u001b[7m<\u001b[7m0\u001b[7m0\u001b[7m8\u001b[7m7\u001b[7m>\u001b[27m \u0008
 
 </script>
 </body>

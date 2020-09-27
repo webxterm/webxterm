@@ -112,6 +112,9 @@ class FreeMono extends Font_1.Font {
     getFontName() {
         return "FreeMono Regular";
     }
+    getLineHeight() {
+        return 2;
+    }
 }
 exports.FreeMono = FreeMono;
 class FreeMonoBold extends FreeMono {

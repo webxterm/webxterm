@@ -1,6 +1,4 @@
 import {Buffer} from "./Buffer";
-import {BufferLine} from "./BufferLine";
-// import {DataBlock} from "./DataBlock";
 
 // http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-The-Alternate-Screen-Buffer
 export class BufferSet {
@@ -31,19 +29,23 @@ export class BufferSet {
         return <Buffer>this._activeBuffer;
     }
 
-    get activeBufferLine(): HTMLElement {
-        if(!this._activeBuffer){
-            throw new Error("_activeBuffer is " + this._activeBuffer);
-        }
-
-        return this._activeBuffer.get(this._activeBuffer.y);
+    get absY(): number{
+        return this.activeBuffer.y + this.normal.saved_buffer.size;
     }
+
+    // get activeBufferLine(): HTMLElement {
+    //     if(!this._activeBuffer){
+    //         throw new Error("_activeBuffer is " + this._activeBuffer);
+    //     }
+    //
+    //     return this._activeBuffer.get(this._activeBuffer.y);
+    // }
 
     get size(): number {
         if(!this._activeBuffer){
             throw new Error("_activeBuffer is " + this._activeBuffer);
         }
-        return this._activeBuffer.lines.length;
+        return this._activeBuffer.size;
     }
 
     /**
@@ -85,7 +87,7 @@ export class BufferSet {
         this._alt.clear();
 
         this._alt.reset();
-        this._alt.fillRows();
+        // this._alt.fillRows();
 
         this._activeBuffer = this._alt;
     }
@@ -95,21 +97,29 @@ export class BufferSet {
      * @param newRows
      * @param newCols
      */
-    resize(newRows: number, newCols: number): DocumentFragment | undefined {
+    resize(newRows: number, newCols: number){
 
+        // if(this.isNormal){
+        //     // 使用默认缓冲区
+        //     if(this._alt)
+        //         this._alt.resize(newRows, newCols);
+        //     if(this._normal)
+        //         this._normal.resize(newRows, newCols);
+        // } else {
+        //     // 使用备用缓冲区
+        //     if(this._normal)
+        //         this._normal.resize(newRows, newCols);
+        //     if(this._alt)
+        //         this._alt.resize(newRows, newCols);
+        // }
         if(this.isNormal){
-            // 使用默认缓冲区
-            if(this._alt)
-                this._alt.resize(newRows, newCols);
-            if(this._normal)
-                return this._normal.resize(newRows, newCols);
+            if(this._normal) this._normal.resize(newRows, newCols);
+            if(this._alt) this._alt.resize_wait = true;
         } else {
-            // 使用备用缓冲区
-            if(this._normal)
-                this._normal.resize(newRows, newCols);
-            if(this._alt)
-                return this._alt.resize(newRows, newCols);
+            if(this._normal) this._normal.resize_wait = true;
+            if(this._alt) this._alt.resize(newRows, newCols);
         }
+
     }
 
     /**
@@ -130,8 +140,8 @@ export class BufferSet {
      * 清除回滚的行
      */
     clearSavedLines(){
-        if(this._normal)
-            this._normal.clearSavedLines();
+        // if(this._normal)
+        //     this._normal.clearSavedLines();
     }
 
     /**

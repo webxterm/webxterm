@@ -114,6 +114,10 @@ export class FreeMono extends Font {
     getFontName(): string {
         return "FreeMono Regular";
     }
+
+    getLineHeight(): number {
+        return 2;
+    }
 }
 
 export class FreeMonoBold extends FreeMono{

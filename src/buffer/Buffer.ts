@@ -2,9 +2,10 @@
  * buffer：存储多个BufferChain
  * Buffer = [ BufferLine = [block, block, block], BufferLine, BufferLine, BufferLine, BufferLine, ...]
  */
-// import {BufferLine} from "./BufferLine";
-
-import {DataBlockAttribute} from "./DataBlockAttribute";
+import {
+    DataBlockAttribute
+} from "./DataBlockAttribute";
+import {LineBuffer} from "./LineBuffer";
 
 /**
  *  memory buffer
@@ -21,13 +22,18 @@ import {DataBlockAttribute} from "./DataBlockAttribute";
  *  ---------------------
  *
  */
+
+
 export class Buffer {
 
-    // 数据链
-    // private _lines: BufferLine[] = [];
-    private _lineBlocks: string[][] = [];       // 二维数组
-    private _lineDirties: boolean[] = [];       // 是否为脏行
-    private _lineElements: HTMLElement[] = [];  // 元素
+    // 缓冲区
+    private readonly _change_buffer: LineBuffer;
+    // 保留区
+    private readonly _saved_buffer: LineBuffer;
+    // 显示区
+    private readonly _display_buffer: LineBuffer;
+    // 回滚区
+    private readonly _undo_buffer: LineBuffer;
 
     // 缓冲区类型
     private readonly type: string;
@@ -36,30 +42,29 @@ export class Buffer {
     private _x: number = 0;
     private _y: number = 0;
 
+    // 高水位，针对y坐标的最大值
+    private _high_water: number = 0;
+
     // 行
     private _rows: number = 0;
     private _columns: number = 0;
 
     private _savedX: number = 0;
     private _savedY: number = 0;
-    private _savedLineNum: number = 0;
 
     // Set Scrolling Region [top;bottom] (default = full size of window) (DECSTBM), VT100.
     private _scrollTop: number = 0;
     private _scrollBottom: number = 0;
 
-    // 行编号
-    private lineNum: number = 0;
-
     // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-The-Alternate-Screen-Buffer
     // 是否可以滚动
     readonly scrollBack: boolean = false;
-    // 保存的行，只保存元素，内容为innerHTML
-    private _savedLines: HTMLElement[] = [];
-    // 最大滚动行数
-    private _maxScrollBack: number = 1024;
 
-    private readonly blankBlocks: string[] = [];
+    // 最大滚动行数，默认为0的话，是无限制
+    private _maxScrollBack: number = -1;
+
+    // 是否等待重置缓冲区
+    private _resize_wait = false;
 
     constructor(rows: number, columns: number, scrollBack: boolean, type: string = "") {
         this._rows = rows;
@@ -75,10 +80,13 @@ export class Buffer {
         // Cursor Position [row;column] (default = [1,1]) (CUP).
         this.y = 1;
         this.x = 1;
+        this._high_water = 1;
+        // this.blankBlocks = Array.from({length:columns}, () => Buffer.newBlankBlock());
 
-        for(let i = 0; i < columns; i++){
-            this.blankBlocks.push(" ");
-        }
+        this._change_buffer = new LineBuffer(rows, "change_buffer");
+        this._saved_buffer = new LineBuffer(0, "saved_buffer");
+        this._display_buffer = new LineBuffer(0, "display_buffer");
+        this._undo_buffer = new LineBuffer(0, "undo_buffer");
     }
 
     get x(): number {
@@ -87,6 +95,7 @@ export class Buffer {
 
     set x(value: number) {
         this._x = value;
+        // this._dirtyLines[value - 1] = 1;
     }
 
     get y(): number {
@@ -95,11 +104,17 @@ export class Buffer {
 
     set y(value: number) {
         this._y = value;
+        if (this._high_water < value) {
+            this._high_water = value;
+        }
+    }
 
-        // let line: BufferLine = this.get(this._y);
-        // if(line && !line.used){
-        //     line.used = true;
-        // }
+    get high_water(): number {
+        return this._high_water;
+    }
+
+    resetHighWater() {
+        this._high_water = 1;
     }
 
     get savedX(): number {
@@ -126,26 +141,22 @@ export class Buffer {
         this._maxScrollBack = value;
     }
 
-    get lines(): HTMLElement[] {
-        return this._lineElements;
+    get resize_wait(): boolean {
+        return this._resize_wait;
     }
 
-    reset(){
-        // this._lines = [];
-        this._lineElements = [];
-        this._lineBlocks = [];
-        this._lineDirties = [];
+    set resize_wait(value: boolean) {
+        this._resize_wait = value;
+    }
+
+    reset() {
+        this._change_buffer.reset();
+        this._saved_buffer.reset();
+        this._display_buffer.reset();
     }
 
     get size(): number {
-        return this._lineElements.length;
-    }
-
-    /**
-     * 获取当前行
-     */
-    get activeBufferLine(): HTMLElement {
-        return this._lineElements[this._y - 1];
+        return this._change_buffer.lines.length;
     }
 
     get scrollTop(): number {
@@ -164,17 +175,6 @@ export class Buffer {
         this._scrollBottom = value;
     }
 
-    // 获取行号
-    get nextLineNum(): number {
-        this.lineNum += 1;
-        return this.lineNum;
-    }
-
-    // 获取当前的行号
-    get currentLineNum(): number {
-        return this.lineNum;
-    }
-
     get rows(): number {
         return this._rows;
     }
@@ -183,155 +183,20 @@ export class Buffer {
         return this._columns;
     }
 
-    /**
-     * 获取保存的行，如果是备用缓冲区的话，任何时候都是空数组。
-     */
-    get savedLines(): HTMLElement[] {
-        return this._savedLines;
+    get change_buffer(): LineBuffer {
+        return this._change_buffer;
     }
 
-    /**
-     * 获取指定的缓冲区链
-     * @param y
-     */
-    get(y: number): HTMLElement {
-        return this._lineElements[y - 1];
+    get saved_buffer(): LineBuffer {
+        return this._saved_buffer;
     }
 
-    getBlocks(y: number): string[] {
-        return this._lineBlocks[y - 1];
+    get display_buffer(): LineBuffer {
+        return this._display_buffer;
     }
 
-    isDirty(y: number): boolean {
-        return this._lineDirties[y - 1];
-    }
-
-    /**
-     *
-     * @param y
-     * @param isDirty
-     */
-    updateDirty(y: number, isDirty: boolean){
-        const source = this._lineDirties[y - 1];
-        if(isDirty){
-            if(!source)
-                this._lineDirties[y - 1] = true;
-        } else {
-            if(source)
-                this._lineDirties[y - 1] = false;
-        }
-    }
-
-    // /**
-    //  * 在指定的位置插入缓冲区链/行
-    //  * @param y
-    //  * @param lines
-    //  */
-    // insert(y: number, ...lines: BufferLine[]) {
-    //     let result = [];
-    //     for (let i = 0; i < lines.length; i++) {
-    //         let element = lines[i].element;
-    //         if (element) {
-    //             let afterNode = this._lines[y - 1 + i].element;
-    //             let line = lines[i];
-    //             result.push(afterNode);
-    //             // line.setAfterNode(afterNode);
-    //             this._lines.splice(y - 1 + i, 0, line);
-    //         }
-    //
-    //     }
-    //     return result;
-    // }
-
-    insert2(y: number, blocks: string[], element: HTMLElement){
-        let afterNode = this._lineElements[y - 1];
-        this._lineBlocks.splice(y - 1, 0, blocks);
-        return afterNode;
-    }
-
-    insert(y: number, element: HTMLElement){
-        let afterNode = this._lineElements[y - 1];
-        this._lineBlocks.splice(y - 1, 0, this.getBlankBlocks());
-        this._lineElements.splice(y - 1, 0, element);
-        return afterNode;
-    }
-
-    // /**
-    //  * 附加行
-    //  * @param lines
-    //  */
-    // append(...lines: BufferLine[]) {
-    //     for (let i = 0; i < lines.length; i++) {
-    //         this._lines.push(lines[i]);
-    //     }
-    // }
-
-    /**
-     * 附加行
-     * @param blocks
-     * @param element
-     */
-    append2(blocks: string[], element: HTMLElement){
-        this._lineBlocks.push(blocks);
-        this._lineElements.push(element);
-    }
-
-    // /**
-    //  * 删除指定位置的缓冲区行
-    //  * @param y
-    //  * @param deleteCount
-    //  * @param saveLines 是否保存行
-    //  */
-    // delete(y: number, deleteCount: number = 1, saveLines: boolean) : BufferLine[] {
-    //     let lines = this._lines.splice(y - 1, deleteCount);
-    //     for (let i = 0; i < lines.length; i++) {
-    //         if (saveLines && this.scrollBack) {
-    //             this._savedLines.push(lines[i].element);
-    //
-    //             // 如果超过最大的scrollBack的话，就删除第一行
-    //             if(this._savedLines.length > this._maxScrollBack){
-    //                 this._savedLines.splice(0, 1)[0].remove();
-    //             }
-    //         } else {
-    //             // 不是备用缓冲区或不需要保存行。
-    //             // 直接将其元素删除。
-    //             lines[i].element.remove();
-    //             lines = [];
-    //         }
-    //     }
-    //     return lines;
-    // }
-
-    delete2(y: number, deleteCount: number = 1, saveLines: boolean) : object {
-
-        let result: any = {},
-            index = y - 1,
-            deletedBlocks = this._lineBlocks.splice(index, deleteCount),
-            deletedElements = this._lineElements.splice(index, deleteCount),
-            deletedDirties = this._lineDirties.splice(index, deleteCount);
-
-        for (let i = 0; i < deletedElements.length; i++) {
-            if (saveLines && this.scrollBack) {
-                this._savedLines.push(deletedElements[i]);
-                // 如果超过最大的scrollBack的话，就删除第一行
-                if(this._savedLines.length > this._maxScrollBack){
-                    this._savedLines.splice(0, 1)[0].remove();
-                }
-            } else {
-                // 不是备用缓冲区或不需要保存行。
-                // 直接将其元素删除。
-                deletedElements[i].remove();
-
-            }
-        }
-
-        if (saveLines && this.scrollBack) {
-            result['dirties'] = deletedDirties;
-            result["blocks"] = deletedBlocks;
-            result["elements"] = deletedElements;
-        }
-
-        return result;
+    get undo_buffer(): LineBuffer {
+        return this._undo_buffer;
     }
 
     /**
@@ -340,218 +205,101 @@ export class Buffer {
      * @param newCols
      */
     resize(newRows: number, newCols: number) {
-
         this._scrollBottom = newRows;
+        const currentRows = this.size;
+        const currentCols = this.columns;
 
-        const rows = this._lineElements.length;
+        if (currentRows != newRows) {
+            // 将缓冲区的所有行移动到保留区中
+            // 合并缓冲区的行到保留区
+            this._change_buffer.moveAllLineTo(this._saved_buffer);
+            // 将需要的行移动到缓冲区
+            let start = this._saved_buffer.lines.length - newRows;
+            this._saved_buffer.moveLineTo(this._change_buffer, start < 0 ? 0: start, newRows);
 
-        const fragment = document.createDocumentFragment();
+            // 当前缓冲区的行数
+            const cur_buf_row_count = this._change_buffer.lines.length;
+            if (currentRows < newRows) {
+                // 窗口的高度放大。 24 -> 25
+                this._y += cur_buf_row_count - currentRows;
 
-        if (rows < newRows) {
-            for (let i = rows; i < newRows; i++) {
-                // 添加缓冲区行
-                // let line = new BufferLine(newRows);
-                // this._lines.push(line);
-                this._lineDirties.push(false);
-                this._lineBlocks.push(this.getBlankBlocks());
-                fragment.appendChild(this.getBlankLine2());
-            }
-        } else if (rows > newRows) {
-            // 删除
-            let len = rows;
-            for (let i = newRows; i < len; i++) {
-                let deletedElement = this._lineElements.splice(i, 1);
-                this._lineBlocks.splice(i, 1);
-                this._lineDirties.splice(i, 1);
-                if(deletedElement.length > 0)
-                deletedElement[0].remove();
+                // 剩余多少行没有添加，意思是保留区是空的。
+                const appendRowCount = newRows - cur_buf_row_count;
+                if (appendRowCount > 0) {
+                    // 添加空行
+                    this.appendLine(appendRowCount);
+                }
 
-                i -= 1;     // splice
-                len -= 1;   // splice
+            } else if (currentRows > newRows) {
+                // 窗口的高度缩小。 如 25 -> 24
+                this._y -= (currentRows - newRows);
             }
         }
-        // else {
-        //     // newRows == this._row
-        // }
 
-        if (this._columns > newCols) {
+        if (currentCols > newCols) {
             // 删除列
             for (let i = 0; i < this._rows; i++) {
-                let blocks = this._lineBlocks[i];
-                if(!blocks) continue;
-                let len = blocks.length - newCols;
-                blocks.splice(newCols, len);
+                this.remove(i, newCols, currentCols - newCols);
             }
 
-            this.blankBlocks.splice(newCols, this.blankBlocks.length - newCols);
-
-        } else if(this._columns < newCols){
+        } else if (currentCols < newCols) {
             // 添加列
             for (let i = 0; i < this._rows; i++) {
-                let blocks = this._lineBlocks[i];
-                if(!blocks) continue;
-                let len = newCols - blocks.length;
-                for (let j = 0; j < len; j++) {
-                    blocks.push(Buffer.newEmptyBlock());
-                }
+                this.append(i, newCols - currentCols);
             }
 
-            for(let i = this._columns; i < newCols; i++){
-                this.blankBlocks.push(" ");
-            }
         }
-        // else {
-        //     // newCols === this._columns
-        // }
 
         this._columns = newCols;
         this._rows = newRows;
-
-        return fragment;
-
     }
 
-    clear() {
+    clear(): void {
         this.y = 1;
         this.x = 1;
-        this.lineNum = 0;
-
         this.scrollTop = 1;
         this.scrollBottom = this._rows;
     }
 
-    fillRows(): DocumentFragment{
-        let fragment = document.createDocumentFragment();
-        for (let y = 0, el; y < this._rows; y++) {
-            el = this.getBlankLine2();
-            this._lineElements.push(el);
-            fragment.appendChild(el);
-            this._lineBlocks.push(this.getBlankBlocks());
-            this._lineDirties.push(false);
-        }
-        return fragment;
-    }
-
-    // getBlankLine() {
-    //
-    //     // let element = document.createElement("div");
-    //
-    //     let line = new BufferLine(this._columns);
-    //     this.setDataId(line.element);
-    //     // line.used = true;
-    //
-    //     return line;
-    // }
-
-    getBlankBlocks(){
-        return this.blankBlocks.slice(0, this.columns);
-    }
-
-    getBlankLine2(){
-        let el = document.createElement("div");
-        el.className = "viewport-row";
-        return el;
-    }
-
-    // setDataId(element: HTMLDivElement){
-    //     element.setAttribute("line-num", this.nextLineNum + "");
-    // }
-
     /**
-     * 备用缓冲区清除保存的行
+     * 插入空行
+     * @param start 开始的索引
+     * @param count 插入多少行
      */
-    clearSavedLines(){
-        let deletedLines = this.savedLines.splice(0, this.savedLines.length);
-        for(let i = 0, len = deletedLines.length; i < len; i++){
-            deletedLines[i].remove();
-        }
-    }
-
-
-    /**
-     * 创建一个空块
-     */
-    static newEmptyBlock(){
-        return "";
-    }
-
-    /**
-     * 创建一个新块
-     * @param data
-     * @param blockAttr
-     * @param len2
-     */
-    static newBlock(data: string, blockAttr: DataBlockAttribute, len2: number = 0){
-        if(data.length > 1){
-            throw new Error("{" + data + "} length is " + data.length + ", expect 1.");
-        }
-
-        let hex = blockAttr.hex;
-        if(hex == "" && len2 == 0){
-            return data;
-        }
-
-        return data + len2 + hex;
-    }
-
-    /**
-     * 创建一个长度为2的数据块
-     * @param data
-     * @param blockAttr
-     */
-    static newLen2Block(data: string, blockAttr: DataBlockAttribute){
-        return Buffer.newBlock(data, blockAttr, 1);
-    }
-
-    /**
-     * 在指定的位置插入块
-     * @param y
-     * @param x
-     * @param blocks
-     */
-    insertBlocks(y: number, x: number, ...blocks: string[]){
-
-        for(let i = 0; i < blocks.length; i++){
-            this._lineBlocks[y - 1].splice(x - 1 + i, 0, blocks[i]);
-        }
-        // 超出当前行的字符数的话，需要从尾部删除。
-        const deleteCount = this._lineBlocks[y - 1].length - this._columns;
-        if(0 < deleteCount){
-            this._lineBlocks[y - 1].splice(this._columns, deleteCount);
+    insertLine(start: number, count: number): void {
+        for (let i = 0; i < count; i++) {
+            this._change_buffer.insertLine(start + i, this.columns);
         }
     }
 
     /**
-     * 替换指定位置的块
-     * @param y
-     * @param x
-     * @param blocks
+     * 附加多少空行，在数组尾部添加
+     * @param count
      */
-    replaceBlocks(y: number, x: number, ...blocks: any[]){
-        for(let i = 0; i < blocks.length; i++){
-            // this.blocks.splice(x - 1 + i, 1, blocks[i]);
-            this._lineBlocks[y - 1][x - 1 + i] = blocks[i];
+    appendLine(count: number = 1): void {
+        // 插入多行
+        for (let i = 0; i < count; i++) {
+            this._change_buffer.appendLine(this._columns);
         }
     }
 
     /**
-     * 替换指定位置的数据块
-     * @param y
-     * @param x
-     * @param block
+     * 删除行
+     * @param start
+     * @param count
+     * @param scroll_back 是否将删除的行添加到保留区中
      */
-    replaceOneBlock(y: number, x: number, block: any){
-        this._lineBlocks[y - 1][x - 1] = block;
-    }
+    removeLine(start: number, count: number, scroll_back: boolean = false): void {
+        if (scroll_back && this.scrollBack) {
+            this._change_buffer.moveLineTo(this._saved_buffer, start, count);
+            if (this._saved_buffer.lines.length > this.maxScrollBack) {
+                // 直接将第一行删除。
+                this._saved_buffer.removeLine(0, 1);
+            }
+        } else {
+            this._change_buffer.removeLine(start, count);
+        }
 
-    /**
-     * 删除指定位置的块
-     * @param y
-     * @param x
-     * @param deleteCount
-     */
-    deleteBlocks(y: number, x: number, deleteCount: number = 1): any[]{
-        return this._lineBlocks[y - 1].splice(x - 1, deleteCount);
     }
 
     /**
@@ -559,29 +307,133 @@ export class Buffer {
      * @param y
      * @param blockAttr 属性
      */
-    eraseLine(y: number, blockAttr: DataBlockAttribute) {
-        for(let i = 0, len = this._lineBlocks[y - 1].length; i < len; i++){
-            this._lineBlocks[y - 1][i] = this.updateBlockValue(" ", blockAttr);
+    eraseLine(y: number, blockAttr: DataBlockAttribute): void {
+        if (!this._change_buffer.lines[y - 1]) {
+            console.info("eraseLine:this._lines[y - 1]" + this._change_buffer.lines[y - 1]);
+            return;
+        }
+        for (let xIndex = 0, len = this._change_buffer.lines[y - 1].length; xIndex < len; xIndex++) {
+            this.replace(y - 1, xIndex, 1, blockAttr, " ");
+        }
+    }
+
+    /**
+     * 向缓冲区添加行
+     */
+    fillRows(): void {
+        if (!this._rows) {
+            throw new Error("this._rows is " + this._rows);
+        } else {
+            for (let y = 0; y < this._rows; y++) {
+                this._change_buffer.replaceLine(y, this.columns);
+            }
+        }
+    }
+
+    /**
+     * 移除行的某些块。
+     * @param yIndex y的索引
+     * @param start 开始的索引
+     * @param deleteCount
+     */
+    remove(yIndex: number, start: number, deleteCount: number): void {
+        this._change_buffer.remove(yIndex, start, deleteCount);
+    }
+
+    /**
+     * 给指定的行添加块
+     * @param yIndex
+     * @param count
+     */
+    append(yIndex: number, count: number) {
+        this._change_buffer.append(yIndex, count);
+    }
+
+
+    // /**
+    //  * 在指定的位置插入块
+    //  * @param yIndex
+    //  * @param xIndex
+    //  * @param charWidth 字符宽度，默认是1
+    //  * @param dataAttr
+    //  * @param blocksData
+    //  */
+    // insert(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, ...blocksData: string[]) {
+    //     for (let i = 0, len = blocksData.length; i < len; i++) {
+    //         this._change_buffer.insert(yIndex, xIndex + i, charWidth, dataAttr, blocksData[i]);
+    //     }
+    // }
+
+    /**
+     * 更新块信息
+     * @param yIndex
+     * @param xIndex
+     * @param charWidth
+     * @param dataAttr
+     * @param blocksData
+     */
+    replace(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, ...blocksData: string[]) {
+        for (let i = 0, len = blocksData.length; i < len; i++) {
+            this._change_buffer.replace(yIndex, xIndex + i, charWidth, dataAttr, blocksData[i]);
         }
     }
 
     /**
      * 抹除某一个数据块
-     * @param y
-     * @param x
+     * @param yIndex
+     * @param xIndex
      * @param blockAttr
      */
-    eraseBlock(y: number, x: number, blockAttr: DataBlockAttribute){
-        this._lineBlocks[y - 1][x - 1] = this.updateBlockValue(" ", blockAttr);
+    erase(yIndex: number, xIndex: number, blockAttr: DataBlockAttribute) {
+        const block = this._change_buffer.lines[yIndex][xIndex];
+        if (!block && block.length == 0) {
+            // 如果当前清掉的是中文占位符，则需要把上一个中文清掉。
+            // Demo：echo -e '😙\x08\x1b[K'
+            try {
+                this.replace(yIndex, xIndex - 1, 1, blockAttr, " ");
+            } catch (e) {
+            }
+        }
+        this.replace(yIndex, xIndex, 1, blockAttr, " ");
+    }
+
+
+    /**
+     * 将缓冲区的某一行复制到undo缓冲区中
+     * @param yIndex
+     */
+    copy_change_buffer_to_undo_buffer(yIndex: number){
+        this.change_buffer.checkLine(yIndex);
+
+        // 复制行, 非地址引用，slice
+        // 如果行不在undo缓冲区内，则添加
+        for(let i = 0, len = this._undo_buffer.line_ids.length; i < len; i++) {
+            if(this._undo_buffer.line_ids[i] == this._change_buffer.line_ids[yIndex]){
+                // 行已存在
+                this._undo_buffer.removeLine(i, 1);
+                break;
+            }
+        }
+
+        this._undo_buffer.copyLineFrom(this._change_buffer, yIndex);
+
     }
 
     /**
-     *
-     * @param data 更新数据
-     * @param blockAttr 属性
+     * 回滚某一行
      */
-    updateBlockValue(data: string, blockAttr: DataBlockAttribute){
-        return Buffer.newBlock(data, blockAttr);
+    rollback(){
+        if(this._undo_buffer.size == 0) return;
+        const count = this._change_buffer.line_ids.length;
+        for(let i = 0, len = this._undo_buffer.line_ids.length; i < len; i++) {
+            for(let j = 0; j < count; j++){
+                if(this._undo_buffer.line_ids[i] == this._change_buffer.line_ids[j]){
+                    // 恢复这一行
+                    this._change_buffer.replaceLineFrom(this._undo_buffer, j);
+                }
+            }
+        }
     }
+
 
 }

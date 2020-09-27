@@ -114,6 +114,10 @@ export class DejaVuSansMono extends Font {
     getFontName(): string {
         return "DejaVu Sans Mono";
     }
+
+    getLineHeight(): number {
+        return 10;
+    }
 }
 
 

@@ -76,64 +76,244 @@
     </style>
 </head>
 <body>
-    <textarea id="result" style="width: 100vw; height: 50vh"></textarea>
+    <canvas id="test" width="2868" height="1536"></canvas>
 
     <script>
-        const fontFamily = [
-            "DejaVuSansMono",
-            // "DejaVuSansMono-Bold",
-            // "DejaVuSansMono-BoldOblique",
-            // "DejaVuSansMono-Oblique",
-            "FreeMono",
-            // "FreeMonoBold",
-            // "FreeMonoBoldOblique",
-            // "FreeMonoOblique",
-            // "UbuntuMono-B",
-            // "UbuntuMono-BI",
-            "UbuntuMono-R",
-            "UbuntuMono-RI",
-            // "LiberationMono-Bold",
-            // "LiberationMono-BoldItalic",
-            // "LiberationMono-Italic",
-            "LiberationMono-Regular"
-        ];
-
-        let result = {};
-        for(let f of fontFamily){
-
-            let test = document.createElement("div");
-            test.style.fontFamily = f;
-            document.body.appendChild(test);
-
-            for(let i = 0; i < 30; i++){
-                let span = document.createElement("span");
-                span.innerHTML = "w";
-                span.style.fontSize = (i + 6) + "pt";
-                span.setAttribute("data-size", (i + 6) + "pt");
-                test.appendChild(span);
-            }
-
-            setTimeout(() => {
-
-                let obj = {};
-                for(let node of test.childNodes){
-                    let rect = node.getBoundingClientRect();
-                    // value += '"' + node.getAttribute("data-size") + '":';
-                    // value += "[" + rect.width + ", " + rect.height + "], ";
-                    // let key = node.getAttribute("data-size");
-                    obj[node.getAttribute("data-size")] = [rect.width, rect.height];
-                }
-
-                result[f] = obj;
-
-                document.getElementById('result').value = JSON.stringify(result);
-                // console.info(value.substring(0, value.length) + "}");
+        
+        let bold = 0, faint = 0,
+        underline = 0,
+        slowBlink = 1,
+        rapidBlink = 1,
+        inverse = 0,
+        invisible = 0,
+        crossedOut = 1;
 
 
-            }, 3000);
+        // const bold_value = 10000000, faint_value = 1000000,
+        //     underline_value = 100000,
+        //     slowBlink_value = 10000,
+        //     rapidBlink_value = 1000,
+        //     inverse_value = 100,
+        //     invisible_value = 10,
+        //     crossedOut_value = 1;
+        const bold_value = 1,
+            faint_value = 2,
+            underline_value = 4,
+            slowBlink_value = 8,
+            rapidBlink_value = 16,
+            inverse_value = 32,
+            invisible_value = 64,
+            crossedOut_value = 128;
 
+        // let t0 = new Date();
+        // let s = 0;
+        // const classNames = [
+        //     "bold",
+        //     "faint",
+        //     "underline",
+        //     "slow-blink",
+        //     "rapid-blink",
+        //     "inverse",
+        //     "invisible",
+        //     "crossed-out"
+        // ];
+        // let attrs = [];
+        // for(let i = 0; i < 100; i++){
+        //     s = parseInt("" +
+        //         "" +bold +
+        //         "" +faint +
+        //         "" +underline +
+        //         "" +slowBlink +
+        //         "" +rapidBlink +
+        //         "" +inverse +
+        //         "" +invisible +
+        //         "" +crossedOut);
+        //
+        //     // const n1 = s.toString().length;
+        //     // const n2 = classNames.length - n1;
+        //     // for(let i = n1 - 1; 0 <= i; i--){
+        //     //     if(s.toString().charAt(i) == "1"){
+        //     //         attrs += classNames[i + n2];
+        //     //     }
+        //     //     if(i != 0){
+        //     //         attrs += " ";
+        //     //     }
+        //     // }
+        //     s = null;
+        // }
+
+        // console.info(new Date().getTime() - t0.getTime());
+
+        let t1 = new Date();
+        let s2 = 0;
+
+        for(let i = 0; i < 1; i++){
+            // s2 = parseInt("" +
+            //     0 +
+            //     1 +
+            //     1 +
+            //     1 +
+            //     0 +
+            //     1 +
+            //     1 +
+            //     0);
+            s2 = (bold ? bold_value: 0)
+                + (faint ? faint_value : 0)
+                + (underline ? underline_value : 0)
+                + (slowBlink ? slowBlink_value : 0)
+                + (rapidBlink ? rapidBlink_value : 0)
+                + (inverse ? inverse_value : 0)
+                + (invisible ? invisible_value : 0)
+                + (crossedOut ? crossedOut_value : 0);
+
+            bold = s2 >= bold_value ? 1 : 0;
+            faint = s2 >= faint_value ? 1 : 0;
+            underline = s2 >= underline_value ? 1 : 0;
+            slowBlink = s2 >= rapidBlink_value ? 1 : 0;
+            rapidBlink = s2 >= bold_value ? 1 : 0;
+            inverse = s2 >= inverse_value ? 1 : 0;
+            invisible = s2 >= invisible_value ? 1 : 0;
+            crossedOut = s2 >= crossedOut_value ? 1 : 0;
 
         }
+        console.info(new Date().getTime() - t1.getTime());
+
+        console.info(1);
+        console.info(1 << 1);
+        console.info(1 << 1 << 1);
+        console.info(1 << 1 << 1 << 1);
+        console.info(1 << 1 << 1 << 1 << 1);
+        console.info(1 << 1 << 1 << 1 << 1 << 1);
+        console.info(1 << 1 << 1 << 1 << 1 << 1 << 1);
+        console.info(1 << 1 << 1 << 1 << 1 << 1 << 1 << 1);
+
+        const
+            ATTR_CODE_NONE = 0,
+            ATTR_CODE_BOLD = 1,
+            ATTR_CODE_INVERSE = 2,
+            ATTR_CODE_FAINT = 4,
+            ATTR_CODE_UNDERLINE = 8,
+            ATTR_CODE_SLOW_BLINK = 16,
+            ATTR_CODE_RAPID_BLINK = 32,
+            ATTR_CODE_INVISIBLE = 64,
+            ATTR_CODE_CROSSED_OUT = 128;
+
+
+        let value = bold
+
+        switch (value) {
+            case ATTR_CODE_NONE:
+                console.info("eq: ATTR_CODE_NONE")
+                break;
+            case ATTR_CODE_BOLD:
+                console.info("eq: ATTR_CODE_BOLD")
+                break;
+            case ATTR_CODE_INVERSE:
+                console.info("eq: ATTR_CODE_INVERSE")
+                break;
+            case ATTR_CODE_FAINT:
+                console.info("eq: ATTR_CODE_FAINT")
+                break;
+            case ATTR_CODE_UNDERLINE:
+                console.info("eq: ATTR_CODE_UNDERLINE")
+                break;
+            case ATTR_CODE_SLOW_BLINK:
+                console.info("eq: ATTR_CODE_SLOW_BLINK")
+                break;
+            case ATTR_CODE_RAPID_BLINK:
+                console.info("eq: ATTR_CODE_RAPID_BLINK")
+                break;
+            case ATTR_CODE_INVISIBLE:
+                console.info("eq: ATTR_CODE_INVISIBLE")
+                break;
+            case ATTR_CODE_CROSSED_OUT:
+                console.info("eq: ATTR_CODE_CROSSED_OUT")
+                break;
+            default:
+                if(value > ATTR_CODE_CROSSED_OUT){
+                    value -= ATTR_CODE_CROSSED_OUT;
+                    console.info("ATTR_CODE_CROSSED_OUT")
+                }
+                if(value >= ATTR_CODE_INVISIBLE){
+                    value -= ATTR_CODE_INVISIBLE;
+                    console.info("ATTR_CODE_INVISIBLE")
+                }
+                if(value >= ATTR_CODE_RAPID_BLINK){
+                    value -= ATTR_CODE_RAPID_BLINK;
+                    console.info("ATTR_CODE_RAPID_BLINK")
+                }
+                if(value >= ATTR_CODE_SLOW_BLINK){
+                    value -= ATTR_CODE_SLOW_BLINK;
+                    console.info("ATTR_CODE_SLOW_BLINK")
+                }
+                if(value >= ATTR_CODE_UNDERLINE){
+                    value -= ATTR_CODE_UNDERLINE;
+                    console.info("ATTR_CODE_UNDERLINE")
+                }
+                if(value >= ATTR_CODE_FAINT){
+                    value -= ATTR_CODE_FAINT;
+                    console.info("ATTR_CODE_FAINT")
+                }
+                if(value >= ATTR_CODE_INVERSE){
+                    value -= ATTR_CODE_INVERSE;
+                    console.info("ATTR_CODE_INVERSE")
+                }
+                if(value >= ATTR_CODE_BOLD){
+                    value -= ATTR_CODE_BOLD;
+                    console.info("ATTR_CODE_BOLD")
+                }
+
+        }
+
+        console.info("数组比较。。。")
+
+        let t100 = new Date();
+        let a11 = [];
+        for(let i = 0; i < 10000000; i++){
+            a11[i] = i;
+        }
+        console.info(new Date().getTime() - t100.getTime());
+
+        let t101 = new Date();
+        let a12 = [];
+        for(let i = 0; i < 10000000; i++){
+            a12.push(i);
+        }
+        console.info(new Date().getTime() - t101.getTime());
+
+        // let t102 = new Date();
+        // let a13 = [];
+        // for(let i = 0; i < 10000000; i++){
+        //     a13.splice(i, 0, i);
+        // }
+        // console.info(new Date().getTime() - t102.getTime());
+
+        let t103 = new Date();
+        let a14 = new Array(10000000);
+        for(let i = 0, len = a14.length; i < len; i++){
+            a14[i] = i;
+        }
+        console.info(new Date().getTime() - t103.getTime());
+
+
+        let t104 = new Date();
+        a11.splice(0, a11.length);
+        console.info(new Date().getTime() - t104.getTime());
+
+        let t105 = new Date();
+        for(let i = 0, len = a14.length; i < len; i++){
+            a14.pop();
+        }
+        console.info(new Date().getTime() - t105.getTime());
+
+        let t106 = new Date();
+        for(let i = 0, len = a12.length; i < len; i++){
+            a12.shift();
+        }
+        console.info(new Date().getTime() - t106.getTime());
+
+
+
 
 
 

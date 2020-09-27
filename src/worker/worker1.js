@@ -9,7 +9,6 @@ let enableHeartbeat;        // 是否启动心跳
 let messageQueue = [];      // 消息队列
 let transferTimer;          // 传输消息队列的编号（定时器）
 
-
 function parseJSON(str){
 
     let [start, stop, i, len] = [0, 0, 0, str.length];
@@ -75,37 +74,6 @@ function startHeartbeat(){
 
 }
 
-/**
- * 开始传输
- */
-function startTransfer(){
-    // if(transferTimer){
-    //     return;
-    // }
-    //
-    // transferTimer = setInterval(() => {
-    //     let len = messageQueue.length;
-    //     if(len === 0){
-    //         clearInterval(transferTimer);
-    //         transferTimer = 0;
-    //     }
-    //     postMessage({
-    //         "type": "get",
-    //         "data": messageQueue.splice(0, len).join("")
-    //     });
-    // }, 0);
-
-    let len = messageQueue.length;
-    if(len === 0){
-        return;
-    }
-
-    postMessage({
-        "type": "get",
-        "data": messageQueue.splice(0, len).join("")
-    });
-
-}
 
 
 onmessage = function (e) {
@@ -165,15 +133,14 @@ onmessage = function (e) {
                                 "type": "sshVersion",
                                 "data": version
                             });
-                            if(jsonObjects.length > 0)
-                                postMessage({
-                                    "type": "get",
-                                    "data": jsonObjects.join("")
-                                });
+                            if(jsonObjects.length > 0){
+                                messageQueue.push(jsonObjects.join(""));
+                            }
                         } else {
+                            messageQueue.push(data);
+
                             postMessage({
-                                "type": "get",
-                                "data": data
+                                "type": "data"
                             });
                         }
                     }
@@ -185,6 +152,19 @@ onmessage = function (e) {
                 };
 
                 break;
+            case "get":
+                // 获取数据
+                if(messageQueue.length === 0){
+                    break;
+                }
+
+                postMessage({
+                    "type": "get",
+                    "data": messageQueue.splice(0, messageQueue.length).join("")
+                });
+
+                break;
+
             case "put":
                 if(websocket){
                     if(enableHeartbeat){
@@ -194,13 +174,6 @@ onmessage = function (e) {
                     if(enableHeartbeat){
                         startHeartbeat();
                     }
-                }
-                break;
-
-            case "reply":
-                // 调用者回应
-                if(message["action"] === "next"){
-                    startTransfer();
                 }
                 break;
 

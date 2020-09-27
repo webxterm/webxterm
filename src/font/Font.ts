@@ -11,4 +11,8 @@ export class Font {
         return "";
     }
 
+    getLineHeight(): number {
+        return 1;
+    }
+
 }

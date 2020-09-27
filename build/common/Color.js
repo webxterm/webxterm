@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 class Color {
     static parseColor(color, alpha = 0.99) {
+        if (1 === 1)
+            return color;
         if (color.indexOf("rgba") !== -1)
             return color;
         alpha = alpha || 'ff';

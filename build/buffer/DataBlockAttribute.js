@@ -1,131 +1,46 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ATTR_MODE_NONE = 0, exports.ATTR_MODE_BOLD = 1, exports.ATTR_MODE_INVERSE = 2, exports.ATTR_MODE_ITALIC = 4, exports.ATTR_MODE_FAINT = 8, exports.ATTR_MODE_UNDERLINE = 16, exports.ATTR_MODE_SLOW_BLINK = 32, exports.ATTR_MODE_INVISIBLE = 64;
 class DataBlockAttribute {
     constructor() {
-        this._len2 = false;
-        this._bold = false;
-        this._faint = false;
-        this._italic = false;
-        this._underline = false;
-        this._slowBlink = false;
-        this._rapidBlink = false;
-        this._inverse = false;
-        this._invisible = false;
-        this._crossedOut = false;
-        this._colorClass = "";
-        this._backgroundColorClass = "";
-        this._version = 0;
+        this.bold = 0;
+        this.faint = 0;
+        this.italic = 0;
+        this.underline = 0;
+        this.slowBlink = 0;
+        this.inverse = 0;
+        this.invisible = 0;
+        this.colorClass = "";
+        this.backgroundColorClass = "";
     }
-    get len2() {
-        return this._len2;
+    get sum() {
+        return this.bold
+            + this.inverse
+            + this.italic
+            + this.faint
+            + this.underline
+            + this.slowBlink
+            + this.invisible;
     }
-    set len2(value) {
-        if (value == this._len2)
-            return;
-        this._len2 = value;
-        this._version += 1;
-    }
-    get bold() {
-        return this._bold;
-    }
-    set bold(value) {
-        if (value == this._bold)
-            return;
-        this._bold = value;
-        this._version += 1;
-    }
-    get faint() {
-        return this._faint;
-    }
-    set faint(value) {
-        if (value == this._faint)
-            return;
-        this._faint = value;
-        this._version += 1;
-    }
-    get italic() {
-        return this._italic;
-    }
-    set italic(value) {
-        if (value == this._italic)
-            return;
-        this._italic = value;
-        this._version += 1;
-    }
-    get underline() {
-        return this._underline;
-    }
-    set underline(value) {
-        if (value == this._underline)
-            return;
-        this._underline = value;
-        this._version += 1;
-    }
-    get slowBlink() {
-        return this._slowBlink;
-    }
-    set slowBlink(value) {
-        if (value == this._slowBlink)
-            return;
-        this._slowBlink = value;
-        this._version += 1;
-    }
-    get rapidBlink() {
-        return this._rapidBlink;
-    }
-    set rapidBlink(value) {
-        if (value == this._rapidBlink)
-            return;
-        this._rapidBlink = value;
-        this._version += 1;
-    }
-    get inverse() {
-        return this._inverse;
-    }
-    set inverse(value) {
-        if (value == this._inverse)
-            return;
-        this._inverse = value;
-        this._version += 1;
-    }
-    get invisible() {
-        return this._invisible;
-    }
-    set invisible(value) {
-        if (value == this._invisible)
-            return;
-        this._invisible = value;
-        this._version += 1;
-    }
-    get crossedOut() {
-        return this._crossedOut;
-    }
-    set crossedOut(value) {
-        if (value == this._crossedOut)
-            return;
-        this._crossedOut = value;
-        this._version += 1;
-    }
-    get colorClass() {
-        return this._colorClass;
-    }
-    set colorClass(value) {
-        if (value == this._colorClass)
-            return;
-        this._colorClass = value;
-        this._version += 1;
-    }
-    get backgroundColorClass() {
-        return this._backgroundColorClass;
-    }
-    set backgroundColorClass(value) {
-        if (value == this._backgroundColorClass)
-            return;
-        this._backgroundColorClass = value;
-        this._version += 1;
-    }
-    get version() {
-        return this._version;
+    reset() {
+        if (this.bold != 0)
+            this.bold = 0;
+        if (this.inverse != 0)
+            this.inverse = 0;
+        if (this.italic != 0)
+            this.italic = 0;
+        if (this.faint != 0)
+            this.faint = 0;
+        if (this.underline != 0)
+            this.underline = 0;
+        if (this.slowBlink != 0)
+            this.slowBlink = 0;
+        if (this.invisible != 0)
+            this.invisible = 0;
+        if (this.colorClass != "")
+            this.colorClass = "";
+        if (this.backgroundColorClass != "")
+            this.backgroundColorClass = "";
     }
 }
 exports.DataBlockAttribute = DataBlockAttribute;

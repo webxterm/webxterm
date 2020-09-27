@@ -1,3 +1,4 @@
+import {SelectionPoint} from "../CanvasSelection";
 
 
 export class CommonUtils {
@@ -152,6 +153,107 @@ export class CommonUtils {
      */
     static str_len(s: string = ''){
         return s.replace(/[^\x00-\xff]/g, "01").length;
+    }
+
+    /**
+     * 实际长度，emoji当一个长度
+     * @param str
+     */
+    // static real_str_len(str: string = ''){
+    //     return Array.from(str).length;
+    // }
+
+    // static charAt(str: string, index: number){
+    //     let i = 0;
+    //     for(let s of str){
+    //         if(i == index){
+    //             return s;
+    //         }
+    //         i++;
+    //     }
+    //     return '';
+    // }
+    //
+    // static substring(str: string, startIndex: number, stopIndex: number = -1){
+    //
+    //     let i = 0, result = [];
+    //     for(let s of str){
+    //         if(i >= startIndex){
+    //             result.push(s);
+    //         } else if((stopIndex != -1 && i >= stopIndex)){
+    //             break
+    //         }
+    //         i++;
+    //     }
+    //     return result.join('');
+    //
+    // }
+
+    static copyArray(array: any[]): any[]{
+        let result = [];
+        for(let i = 0, len = array.length; i < len; i++){
+            result[i] = array[i];
+        }
+        return result;
+    }
+
+    static isChinese(str: string): boolean {
+        return /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi.test(str);
+    }
+
+    static isChineseSymbol(str: string): boolean{
+        return /[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(str);
+    }
+
+    static isNumberLetter(str: string): boolean{
+        return /[a-zA-Z0-9_]/gi.test(str);
+    }
+
+    static isSymbol(str: string){
+        return /[`~!@#$^&*()=|{}':;,\[\].<>/? ]/gi.test(str);
+    }
+
+    /**
+     * 判断两个点是否相同
+     * @param p1
+     * @param p2
+     */
+    static isSamePoint(p1: SelectionPoint, p2: SelectionPoint){
+        return p1 && p2 && (p1.x == p2.x && p1.y == p2.y);
+    }
+
+    /**
+     * 两个点为负纵坐标（y值越大，代表越往下）
+     * @param p1
+     * @param p2
+     */
+    static indexPoint(p1: SelectionPoint, p2: SelectionPoint){
+        if(!p1 || !p2){
+            return false;
+        }
+        if(p1.y < p2.y){
+            return true;
+        } else if(p1.y == p2.y){
+            return p1.x < p2.x;
+        }
+        return false;
+    }
+
+    /**
+     * 反向对比，正纵坐标（y值越大，代表越往上）
+     * @param p1
+     * @param p2
+     */
+    static reverseIndexPoint(p1: SelectionPoint, p2: SelectionPoint){
+        if(!p1 || !p2){
+            return false;
+        }
+        if(p1.y < p2.y){
+            return false;
+        } else if(p1.y == p2.y){
+            return p1.x > p2.x;
+        }
+        return true;
     }
 
 

@@ -1,17 +1,16 @@
 /**
  * 数据块的属性
  */
-
-const classNames = [
-    "crossed-out",
-    "invisible",
-    "inverse",
-    "rapid-blink",
-    "slow-blink",
-    "underline",
-    "faint",
-    "bold"
-];
+export const ATTR_MODE_NONE         = 0,
+            ATTR_MODE_BOLD          = 1,
+            ATTR_MODE_INVERSE       = 2,
+            ATTR_MODE_ITALIC        = 4,
+            ATTR_MODE_FAINT         = 8,
+            ATTR_MODE_UNDERLINE     = 16,
+            ATTR_MODE_SLOW_BLINK    = 32,
+            // ATTR_MODE_RAPID_BLINK   = 64,
+            ATTR_MODE_INVISIBLE     = 64;
+            // ATTR_MODE_CROSSED_OUT   = 256;
 
 export class DataBlockAttribute {
 
@@ -44,7 +43,8 @@ export class DataBlockAttribute {
 
     // MS-DOS ANSI.SYS; 150+ per minute; not widely supported
     // only 0 or 1
-    rapidBlink: number = 0;
+    // 无需支持
+    // rapidBlink: number = 0;
 
     // 反转 reverse video, swap foreground and background colors
     // only 0 or 1
@@ -56,7 +56,8 @@ export class DataBlockAttribute {
 
     // 删除线
     // only 0 or 1
-    crossedOut: number = 0;
+    // 无需支持
+    // crossedOut: number = 0 ;
 
     // 颜色class
     colorClass: string = "";
@@ -65,46 +66,127 @@ export class DataBlockAttribute {
     backgroundColorClass: string = "";
 
     /**
-     * 转为16进制
+     * 获取总和
      */
-    get hex(): string {
-        let n = parseInt(`${this.bold}${this.faint}${this.underline}${this.slowBlink}${this.rapidBlink}${this.inverse}${this.invisible}${this.crossedOut}`);
-        if(n == 0 && this.colorClass == "" && this.backgroundColorClass == ""){
-            return "";
-        }
-        return n.toString(16) + ";" + this.colorClass + ";" + this.backgroundColorClass;
+    get sum(): number{
+        return this.bold
+            + this.inverse
+            + this.italic
+            + this.faint
+            + this.underline
+            + this.slowBlink
+            // + this.rapidBlink
+            + this.invisible;
+            // + this.crossedOut;
     }
+
+    reset(){
+        if(this.bold != 0) this.bold = 0;
+        if(this.inverse != 0) this.inverse = 0;
+        if(this.italic != 0) this.italic = 0;
+        if(this.faint != 0) this.faint = 0;
+        if(this.underline != 0) this.underline = 0;
+        if(this.slowBlink != 0) this.slowBlink = 0;
+        // if(this.rapidBlink != 0) this.rapidBlink = 0;
+        if(this.invisible != 0) this.invisible = 0;
+        // if(this.crossedOut != 0) this.crossedOut = 0;
+
+        if(this.colorClass != "") this.colorClass = "";
+        if(this.backgroundColorClass != "") this.backgroundColorClass = "";
+    }
+
 
 
     /**
-     * 解析样式类名称
-     * @param value 16进制数据;颜色;背景颜色
-     * @return [classNames, color, backgroundColor]
+     * 转为16进制
      */
-    static parseClassName(value: string): string[]{
-
-        if(value == "") return ["", "", ""];
-
-        let result = value.split(";");
-        const hexVal = result.splice(0, 1)[0];
-        let attrs = [];
-        attrs.push(result[0]);
-        attrs.push(result[1]);
-
-        if(hexVal !== "0"){
-            const tmpVal = (parseInt(hexVal, 16) + "").split("").reverse();
-            // 1000000
-            for(let i = 0, len = tmpVal.length; i < len; i++){
-                if(tmpVal[i] === "1"){
-                    attrs.push(classNames[i]);
-                }
-            }
-        }
-
-        result.splice(0, 0, attrs.join(" ").trim());
-
-        return result;
-    }
+    // get hex(): string {
+    //
+    //     // 全部是false;
+    //     if(this.bold == 0
+    //         && this.faint == 0
+    //         && this.underline == 0
+    //         && this.slowBlink == 0
+    //         && this.rapidBlink == 0
+    //         && this.inverse == 0
+    //         && this.invisible == 0
+    //         && this.crossedOut){
+    //         return "";
+    //     }
+    //
+    //     // 将二进制转为十进制
+    //     const binary = parseInt("" +
+    //         this.bold +
+    //         this.faint +
+    //         this.underline +
+    //         this.slowBlink +
+    //         this.rapidBlink +
+    //         this.inverse +
+    //         this.invisible +
+    //         this.crossedOut, 2);
+    //
+    //     if(binary == 0 && this.colorClass == "" && this.backgroundColorClass == ""){
+    //         return "";
+    //     }
+    //
+    //     // 将十进制数转为十六进制数
+    //     let result = binary != 0 ? binary.toString(16) : "";
+    //     if(!!this.colorClass){
+    //         result += ";" + this.colorClass;
+    //     }
+    //     if(!!this.backgroundColorClass){
+    //         if(this.colorClass.length == 0){
+    //             result += ";";
+    //         }
+    //         result += ";" + this.backgroundColorClass;
+    //     }
+    //
+    //     // 情况1：;red
+    //     // 情况2：ee;red
+    //     // 情况3：ee;;red
+    //     // 情况4：;white;red
+    //
+    //     return result;
+    // }
+    //
+    //
+    // /**
+    //  * 解析样式类名称
+    //  * @param value 16进制数据;颜色;背景颜色
+    //  * @return [classNames, color, backgroundColor]
+    //  */
+    // static parseClassName(value: string): string[]{
+    //
+    //     if(value == "") return ["", "", ""];
+    //
+    //     let result = value.split(";");
+    //     const hexVal = result[0] || "";
+    //
+    //     let attrs = "";
+    //     if(!result[1]) result[1] = "";
+    //     if(!result[2]) result[2] = "";
+    //
+    //     if(hexVal.length > 0){
+    //         // 十六进制转10进制 -> 10进制转2进制
+    //         const tmpVal = parseInt(hexVal, 16).toString(2);
+    //         // 1 => 00000001  => 8 - 1 = 7
+    //         // 1001 => 00001001 => 8 - 4 = 4
+    //         const n1 = tmpVal.length;
+    //         const n2 = classNames.length - n1;
+    //         for(let i = n1 - 1; 0 <= i; i--){
+    //             if(tmpVal.charAt(i) == "1"){
+    //                 attrs += classNames[i + n2];
+    //             }
+    //             if(i != 0){
+    //                 attrs += " ";
+    //             }
+    //         }
+    //     }
+    //
+    //     result[0] = attrs;
+    //
+    //     return result;
+    // }
 
     // get tab(): boolean {
     //     return this._tab;

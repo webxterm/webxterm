@@ -153,6 +153,8 @@ export class Color {
      */
     static parseColor(color: string, alpha: number | string = 0.99) {
 
+        if(1 === 1) return color;
+
         if(color.indexOf("rgba") !== -1) return color;
 
         alpha = alpha || 'ff';
