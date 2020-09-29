@@ -24,15 +24,14 @@ export class CanvasCursorRenderer extends CanvasRenderer {
     /**
      * 制作联想输入光标
      */
-    drawComposingCursor(startX: number, startY: number){
+    drawComposingCursor(x: number, y: number){
         if(this.ctx){
-            startX = startX * this.measuredTextWidth;
-            startY = (startY - 1) * this.height;
+            x = x * this.measuredTextWidth;
+            y = (y - 1) * this.height;
             this.ctx.fillStyle = this._term.preferences.cursorBackgroundColor;
-            this.ctx.fillRect(startX, startY, 2, this.height);
-            this._rendered_lines_rect[0] = [startX + "," + startY + "," + 2 + "," + this.height];
+            this.ctx.fillRect(x, y, 2, this.height);
+            this._rendered_lines_rect[0] = [x + "," + y + "," + 2 + "," + this.height];
         }
-        this._rendered_lines_rect.splice(0, this._rendered_lines_rect.length);
     }
 
     /**
@@ -126,5 +125,6 @@ export class CanvasCursorRenderer extends CanvasRenderer {
                 if(this.ctx) this.ctx.clearRect(parseInt(startX), parseInt(startY), parseInt(width), parseInt(height));
             }
         }
+        this._rendered_lines_rect.splice(0, this._rendered_lines_rect.length);
     }
 }
