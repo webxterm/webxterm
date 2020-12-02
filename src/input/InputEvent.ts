@@ -427,6 +427,12 @@ export class InputEvent {
             if(this.terminal.cursor.show) this.terminal.cursor.show = false;
             data = composing.update;
 
+            // if(composing.state == 1){
+            //     // 联想输入开始
+            //     composing.y = this.terminal.bufferSet.activeBuffer.change_buffer.line_ids[this.terminal.parser.y - 1];
+            //     composing.x = this.terminal.parser.x;
+            // }
+
         }
 
         // if(this.composing.state == 1){
@@ -436,17 +442,23 @@ export class InputEvent {
         //     this.rollback_change_buffer();
         // }
         // 创建一个lineBuffer;
-        const display_buffer = this.get_composing_display_buffer(data);
+        this.flush_composing_display_buffer(data);
 
-        if(this.terminal.textRenderer)
-            this.terminal.textRenderer.flushLines(display_buffer , false);
+        // console.info(display_buffer);
+        //
+        // if(this.terminal.textRenderer)
+        //     this.terminal.textRenderer.flushLines(display_buffer , false);
+        //
+        // console.info("显示的data:" + data);
+
+        // this.terminal.echo(data);
 
     }
 
     /**
      * 获取联想输入缓冲区
      */
-    private get_composing_display_buffer(data: string): LineBuffer {
+    private flush_composing_display_buffer(data: string) {
 
         let display_buffer = new LineBuffer(0);
         let change_buffer = this.terminal.bufferSet.activeBuffer.change_buffer;
@@ -489,7 +501,7 @@ export class InputEvent {
 
             display_buffer.replace(y - 1, x - 1, charWidth, attr, s);
             if(charWidth > 1){
-                display_buffer.replace(y - 1, x, 1, attr,"");
+                display_buffer.replace(y - 1, x, 0, attr,"");
             }
 
             x += charWidth;
@@ -507,18 +519,18 @@ export class InputEvent {
                 }
             } else if(/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(s)){
                 // 中文字符
+                // @Parser.handleDoubleChars
                 update(s, 2);
             }
         }
 
+
+        if(this.terminal.textRenderer) this.terminal.textRenderer.flushLines(display_buffer , false);
+
         if(this.terminal.cursorRenderer){
             this.terminal.cursorRenderer.clearCursor();
-            this.terminal.cursorRenderer.drawComposingCursor(x, y);
+            this.terminal.cursorRenderer.drawComposingCursor(x - 1, y);
         }
-
-        console.info(display_buffer);
-
-        return display_buffer;
     }
 
 

@@ -9,7 +9,8 @@ export const ATTR_MODE_NONE         = 0,
             ATTR_MODE_UNDERLINE     = 16,
             ATTR_MODE_SLOW_BLINK    = 32,
             // ATTR_MODE_RAPID_BLINK   = 64,
-            ATTR_MODE_INVISIBLE     = 64;
+            ATTR_MODE_INVISIBLE     = 64,
+            ATTR_MODE_SELECTION     = 128;
             // ATTR_MODE_CROSSED_OUT   = 256;
 
 export class DataBlockAttribute {

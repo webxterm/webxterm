@@ -685,17 +685,18 @@ export class EscapeSequenceParser {
 
         let begin: number = 1,
             end: number,
-            blockSize: number = this.activeBuffer.size;
+            // 列数、块数
+            blockCount: number = this.activeBuffer.columns;
         switch (params[0]) {
             case 1:
                 end = this.parser.x;
                 break;
             case 2:
-                end = blockSize;
+                end = blockCount;
                 break;
             default:
                 begin = this.parser.x;
-                end = blockSize;
+                end = blockCount;
                 break;
         }
 

@@ -140,6 +140,9 @@ export class CanvasSelection {
     // 选择的内容
     private _ranges: SelectionRange[] = [];
 
+    private _full_select_lines: {} = {};
+    private _fuzzy_select_lines: [] = [];
+
     // 是否正在选中
     private _running: boolean = false;
 

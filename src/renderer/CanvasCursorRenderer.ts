@@ -68,7 +68,7 @@ export class CanvasCursorRenderer extends CanvasRenderer {
             {
                 let count = 0;
                 for(let i = 0; i < x - 1; i++){
-                    count += blocks_char_width[xIndex];
+                    count += blocks_char_width[i];
                 }
                 startX = count * width;
             }

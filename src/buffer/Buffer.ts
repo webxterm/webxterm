@@ -33,7 +33,7 @@ export class Buffer {
     // 显示区
     private readonly _display_buffer: LineBuffer;
     // 回滚区
-    private readonly _undo_buffer: LineBuffer;
+    // private readonly _undo_buffer: LineBuffer;
 
     // 缓冲区类型
     private readonly type: string;
@@ -86,7 +86,7 @@ export class Buffer {
         this._change_buffer = new LineBuffer(rows, "change_buffer");
         this._saved_buffer = new LineBuffer(0, "saved_buffer");
         this._display_buffer = new LineBuffer(0, "display_buffer");
-        this._undo_buffer = new LineBuffer(0, "undo_buffer");
+        // this._undo_buffer = new LineBuffer(0, "undo_buffer");
     }
 
     get x(): number {
@@ -195,9 +195,9 @@ export class Buffer {
         return this._display_buffer;
     }
 
-    get undo_buffer(): LineBuffer {
-        return this._undo_buffer;
-    }
+    // get undo_buffer(): LineBuffer {
+    //     return this._undo_buffer;
+    // }
 
     /**
      * 重置缓冲区大小
@@ -232,7 +232,11 @@ export class Buffer {
 
             } else if (currentRows > newRows) {
                 // 窗口的高度缩小。 如 25 -> 24
-                this._y -= (currentRows - newRows);
+                console.info("窗口的高度缩小: _y:"+this._y+", currentRows:" + currentRows + ", newRows:" + newRows);
+                if(this._y > (currentRows - newRows)){
+                    this._y -= (currentRows - newRows);
+                }
+                console.info("窗口的高度缩小: _y:" + this._y);
             }
         }
 
@@ -402,38 +406,38 @@ export class Buffer {
      * 将缓冲区的某一行复制到undo缓冲区中
      * @param yIndex
      */
-    copy_change_buffer_to_undo_buffer(yIndex: number){
-        this.change_buffer.checkLine(yIndex);
-
-        // 复制行, 非地址引用，slice
-        // 如果行不在undo缓冲区内，则添加
-        for(let i = 0, len = this._undo_buffer.line_ids.length; i < len; i++) {
-            if(this._undo_buffer.line_ids[i] == this._change_buffer.line_ids[yIndex]){
-                // 行已存在
-                this._undo_buffer.removeLine(i, 1);
-                break;
-            }
-        }
-
-        this._undo_buffer.copyLineFrom(this._change_buffer, yIndex);
-
-    }
+    // copy_change_buffer_to_undo_buffer(yIndex: number){
+    //     this.change_buffer.checkLine(yIndex);
+    //
+    //     // 复制行, 非地址引用，slice
+    //     // 如果行不在undo缓冲区内，则添加
+    //     for(let i = 0, len = this._undo_buffer.line_ids.length; i < len; i++) {
+    //         if(this._undo_buffer.line_ids[i] == this._change_buffer.line_ids[yIndex]){
+    //             // 行已存在
+    //             this._undo_buffer.removeLine(i, 1);
+    //             break;
+    //         }
+    //     }
+    //
+    //     this._undo_buffer.copyLineFrom(this._change_buffer, yIndex);
+    //
+    // }
 
     /**
      * 回滚某一行
      */
-    rollback(){
-        if(this._undo_buffer.size == 0) return;
-        const count = this._change_buffer.line_ids.length;
-        for(let i = 0, len = this._undo_buffer.line_ids.length; i < len; i++) {
-            for(let j = 0; j < count; j++){
-                if(this._undo_buffer.line_ids[i] == this._change_buffer.line_ids[j]){
-                    // 恢复这一行
-                    this._change_buffer.replaceLineFrom(this._undo_buffer, j);
-                }
-            }
-        }
-    }
+    // rollback(){
+    //     if(this._undo_buffer.size == 0) return;
+    //     const count = this._change_buffer.line_ids.length;
+    //     for(let i = 0, len = this._undo_buffer.line_ids.length; i < len; i++) {
+    //         for(let j = 0; j < count; j++){
+    //             if(this._undo_buffer.line_ids[i] == this._change_buffer.line_ids[j]){
+    //                 // 恢复这一行
+    //                 this._change_buffer.replaceLineFrom(this._undo_buffer, j);
+    //             }
+    //         }
+    //     }
+    // }
 
 
 }

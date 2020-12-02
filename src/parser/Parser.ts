@@ -3,6 +3,7 @@ import {RenderType, Terminal} from "../Terminal";
 import {Buffer} from "../buffer/Buffer";
 import {BufferSet} from "../buffer/BufferSet";
 import {DataBlockAttribute} from "../buffer/DataBlockAttribute";
+import {LineBuffer} from "../buffer/LineBuffer";
 
 // http://www.inwap.com/pdp10/ansicode.txt
 // https://vt100.net/docs/vt102-ug/table5-13.html
@@ -1261,7 +1262,9 @@ export class Parser {
 
             // 添加数据
             // 占用两个位置
-            this.activeBuffer.replace(this.y - 1, this.x - 1, 2, this.terminal.esParser.attribute, chr, "");
+            this.activeBuffer.replace(this.y - 1, this.x - 1, 2, this.terminal.esParser.attribute, chr);
+            this.activeBuffer.replace(this.y - 1, this.x, 0, this.terminal.esParser.attribute, "");
+
             this.x += 2;
 
             return true;

@@ -1,7 +1,6 @@
 /**
  * 偏好设置
  */
-import {Logger} from "./common/Logger";
 import {CommonUtils} from "./common/CommonUtils";
 import {Styles} from "./Styles";
 import {Terminal} from "./Terminal";
@@ -21,6 +20,7 @@ import {
     LiberationMonoItalic
 } from "./font/LiberationMono";
 import {UbuntuMono, UbuntuMonoBold, UbuntuMonoBoldItalic, UbuntuMonoItalic} from "./font/UbuntuMono";
+import {CourierNew} from "./font/CourierNew";
 
 export class Preferences {
 
@@ -204,6 +204,10 @@ export class Preferences {
 
     // 选中文本颜色，如果是空的话，则代表跟随系统颜色、
     private _selectionTextColor: string = "";
+    // 是否跟随系统颜色
+    private _selectionTextDefaultColor: boolean = false;
+    // 是否跟随系统颜色
+    private _selectionDefaultColor: boolean = false;
 
     // 和下一次的刷新间隔(ms)
     private _flushInterval: number = 0;
@@ -241,7 +245,7 @@ export class Preferences {
         this.backgroundRepeat = true;
         this.backgroundSize = "100% 100%";
 
-        this.fontFamily = new FreeMono();
+        this.fontFamily = new CourierNew();
         // this.fontFamily = new DejaVuSansMono();
         this.fontSize = Preferences.defaultFontSize;
 
@@ -275,9 +279,14 @@ export class Preferences {
         this.scrollbar = true;
 
         // 选中颜色，默认为""， 跟随系统颜色。
-        this._selectionColor = "";
+        this.selectionColor = "";
+        this.selectionDefaultColor = false;
+
         // 选中文本颜色，默认为""，跟随系统颜色。
         this.selectionTextColor = "";
+        this.selectionTextDefaultColor = false;
+
+
     }
 
     getFonts(): Font[] {
@@ -930,6 +939,24 @@ export class Preferences {
 
     set selectionTextColor(value: string) {
         this._selectionTextColor = value;
+    }
+
+    get selectionTextDefaultColor(): boolean {
+        return this._selectionTextDefaultColor;
+    }
+
+    set selectionTextDefaultColor(value: boolean) {
+        this._selectionTextDefaultColor = value;
+        this.selectionTextColor = value ? this.color : "";
+    }
+
+    get selectionDefaultColor(): boolean {
+        return this._selectionDefaultColor;
+    }
+
+    set selectionDefaultColor(value: boolean) {
+        this._selectionDefaultColor = value;
+        this.selectionColor = value ? this.backgroundColor : "";
     }
 
     get flushInterval(): number {

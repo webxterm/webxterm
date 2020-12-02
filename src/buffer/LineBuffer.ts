@@ -1,6 +1,5 @@
 import {ATTR_MODE_NONE, DataBlockAttribute} from "./DataBlockAttribute";
 
-
 /**
  * 行缓冲区
  */
@@ -9,24 +8,21 @@ export class LineBuffer {
     private readonly _init_line_size: number = 0;   // 初始化行数
 
     private _lines: string[][];                 // 缓冲区的所有行
-    private _line_char_widths: number[][];     // 字符显示宽度，默认是1，可选值为1，2，3，4...127？
-    private _line_attrs: number[][];           // 行属性, 最小是0，最大为127
+    private _line_char_widths: number[][];      // 字符显示宽度，默认是1，可选值为1，2，3，4...127？
+    private _line_attrs: number[][];            // 行属性, 最小是0，最大为255
     private _line_colors: string[][];           // 字符前景颜色
     private _line_bg_colors: string[][];        // 字符背景颜色
     private _line_soft_wraps: number[];         // 软换行, 0: 硬换行，1:软换行
-
     private _line_ids: number[];                // 行编号，不会改变，只会一直增加
     // 正常的，只有change_buffer会调用改方法。其他buffer将会一直是0
     private _current_id: number = 0;            // 当前的行编号
-
-    //
-    // private _line_compositions: number[][];     // 是否为联想输入
 
     // 缓冲区类型
     private readonly type: string = "";
 
     constructor(init_line_size: number = 0, type: string = "") {
         this._init_line_size = init_line_size;
+
         this._lines = new Array(init_line_size);
         this._line_char_widths = new Array(init_line_size);
         this._line_attrs = new Array(init_line_size);
@@ -45,9 +41,11 @@ export class LineBuffer {
     reset(){
         this._lines = new Array(this._init_line_size);
         this._line_char_widths = new Array(this._init_line_size);
+
         this._line_attrs = new Array(this._init_line_size);
         this._line_colors = new Array(this._init_line_size);
         this._line_bg_colors = new Array(this._init_line_size);
+
         this._line_soft_wraps = new Array(this._init_line_size);
         this._line_ids = new Array(this._init_line_size);
         // this._line_compositions = new Array(this._init_line_size);
@@ -86,10 +84,6 @@ export class LineBuffer {
         return this._line_ids;
     }
 
-    // get line_compositions(): number[][] {
-    //     return this._line_compositions;
-    // }
-
     get size(){
         return this._lines.length;
     }
@@ -112,7 +106,6 @@ export class LineBuffer {
      * @param xIndex
      * @param charWidth
      * @param dataAttr
-     * @param isComposition
      * @param data
      */
     replace(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, data: string): void{
@@ -124,7 +117,6 @@ export class LineBuffer {
         this._line_colors[yIndex][xIndex] = dataAttr.colorClass;
         this._line_bg_colors[yIndex][xIndex] = dataAttr.backgroundColorClass;
 
-        // this._line_compositions[yIndex][xIndex] = isComposition ? 1 : 0;
     }
 
     /**
@@ -134,7 +126,6 @@ export class LineBuffer {
      * @param charWidth
      * @param dataAttr
      * @param blocksData
-     * @param isComposition 是否为联想输入
      */
     replace_more(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, ...blocksData: string[]) {
         for (let i = 0, len = blocksData.length; i < len; i++) {
@@ -157,8 +148,6 @@ export class LineBuffer {
 
         this._line_colors[yIndex].push(...this.newItems("", count));
         this._line_bg_colors[yIndex].push(...this.newItems("", count));
-
-        // this._line_compositions[yIndex].push(...this.newItems(0, count));
     }
 
     /**
@@ -176,8 +165,6 @@ export class LineBuffer {
 
         this._line_colors[yIndex].splice(start, deleteCount);
         this._line_bg_colors[yIndex].splice(start, deleteCount);
-
-        // this._line_compositions[yIndex].splice(start, deleteCount);
     }
 
 
@@ -195,7 +182,6 @@ export class LineBuffer {
         if(!this._line_char_widths[yIndex]) throw new Error("LineBuffer._line_char_widths: rownum="+yIndex+" is not exists");
         if(!this._line_colors[yIndex]) throw new Error("LineBuffer._line_colors: rownum="+yIndex+" is not exists");
         if(!this._line_bg_colors[yIndex]) throw new Error("LineBuffer._line_bg_colors: rownum="+yIndex+" is not exists");
-        // if(!this._line_compositions[yIndex]) throw new Error("LineBuffer._line_compositions: rownum="+yIndex+" is not exists");
         return true;
     }
 
@@ -213,7 +199,6 @@ export class LineBuffer {
         this._line_bg_colors.splice(start, 0, this.newItems("", columns));
         this._line_soft_wraps.splice(start, 0, 0);
         this._line_ids.splice(start, 0, this.current_id);
-        // this._line_compositions.splice(start, 0, this.newItems(0, columns));
     }
 
     /**
@@ -230,7 +215,6 @@ export class LineBuffer {
 
         this._line_soft_wraps.push(0);
         this._line_ids.push(this.current_id);
-        // this._line_compositions.push(this.newItems(0, columns));
     }
 
     /**
@@ -248,8 +232,6 @@ export class LineBuffer {
 
         this._line_soft_wraps[yIndex] = 0;
         this._line_ids[yIndex] = this.current_id;
-
-        // this._line_compositions[yIndex] = this.newItems(0, columns);
     }
 
     /**
@@ -267,7 +249,6 @@ export class LineBuffer {
         this._line_soft_wraps.splice(start, deleteCount);
         this._line_ids.splice(start, deleteCount);
 
-        // this._line_compositions.splice(start, deleteCount);
     }
 
     /**

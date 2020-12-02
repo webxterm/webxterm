@@ -88,6 +88,8 @@ export abstract class CanvasRenderer {
     // https://www.cnblogs.com/imyeah/p/es6-stringTemplate-performance-testing.html
     getFont(fontStyle: DrawFontStyle){
         const fontName = this._term.preferences.fontFamily.getFontName();
+        // 考虑到加粗字体渲染的宽度和高度比普通字体大，后面重新渲染会导致出现边线。
+        // 所以暂时不支持字体加粗样式
         if(fontStyle == DrawFontStyle.BOTH){
             return "italic bold " + this._font_size + "px '" + fontName + "'";
         } else {
@@ -152,9 +154,11 @@ export abstract class CanvasRenderer {
         const len = rect.length;
         if(len == 0) return;
 
-        const height = this.height, startY = yIndex * height;
+        const height = this.height,
+            startY = yIndex * height;
         for(let i = 0, startX, width; i < len; i++){
             [startX, width] = rect[i].split(",");
+
             if(this.ctx) this.ctx.clearRect(parseInt(startX), startY, parseInt(width), height);
         }
     }

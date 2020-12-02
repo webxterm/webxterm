@@ -56,6 +56,10 @@ export class Composition {
     // // 上一次插入的情况
     // last_len: number = 0;
 
+    x: number = 0;
+    y: number = 0;
+
+
     /**
      * 重置
      */

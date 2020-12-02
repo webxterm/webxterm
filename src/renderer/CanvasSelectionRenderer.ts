@@ -738,7 +738,7 @@ export class CanvasSelectionRenderer extends CanvasTextRenderer {
      * @param blocks
      * @param flag
      */
-    private handleSelectBlock(index: number, blocks: string[], flag: number): number{
+    private static handleSelectBlock(index: number, blocks: string[], flag: number): number{
 
         let chr = blocks[index];
         if(flag == 1) {
@@ -842,7 +842,7 @@ export class CanvasSelectionRenderer extends CanvasTextRenderer {
                 // 如果是特殊字符，左边的符号
                 let ret_index = leftIndex;
                 for(let i = startXIndex - 1; 0 <= i; i--){
-                    ret_index = this.handleSelectBlock(i, blocks, flag);
+                    ret_index = CanvasSelectionRenderer.handleSelectBlock(i, blocks, flag);
                     if(flag == 11){
                         // 右边特殊字符，如)、>、}等。
                         if(ret_index == -1) continue;
@@ -860,7 +860,7 @@ export class CanvasSelectionRenderer extends CanvasTextRenderer {
             if(flag != 11){
                 let ret_index = rightIndex;
                 for(let i = startXIndex + 1, len = blocks.length; i < len; i++){
-                    ret_index = this.handleSelectBlock(i, blocks, flag);
+                    ret_index = CanvasSelectionRenderer.handleSelectBlock(i, blocks, flag);
                     if(flag == 10){
                         // 左边特殊字符，如(、<、{等。
                         if(ret_index == -1) continue;
@@ -1038,6 +1038,220 @@ export class CanvasSelectionRenderer extends CanvasTextRenderer {
             // this.select2(this._term.selection);
             return 2;
         }
+    }
+
+
+    select2(selection: CanvasSelection){
+        if(!selection.running) return;
+
+        // 清除原来的。
+        // 清除画布
+        this.clearRect(selection);
+
+        console.info("select2():_csr:" + JSON.stringify(this._csr) + ', last_csr:' + JSON.stringify(this._last_csr));
+        console.info("select2:selection: " + JSON.stringify(selection));
+
+        // 当前显示的区域没有选中的文本。
+        // 坐标点
+        // 选中区域
+        // 如 anchorY = 10, focusY = 11
+        // minY = 10, maxY = 11
+        // selection.offsetTop = 10
+        const minY = Math.min(selection.anchorPoint.y, selection.focusPoint.y)
+            , maxY = Math.max(selection.anchorPoint.y, selection.focusPoint.y);
+
+        // if(minY == 0 && maxY == 0 && selection.anchorPoint.x == 0 && selection.focusPoint.x == 0) {
+        //     console.info("Selection没有选中文本");
+        //     return;
+        // }
+
+        // 最小行号，最大行号，从1开始
+        // minY & maxY = 行号 * height
+        const minLineNum = minY / this.height + selection.offsetTop + 1
+            , maxLineNum = maxY / this.height + selection.offsetTop + 1;
+
+        // 当前显示的行的开始的行号，从1开始
+        const topLineNum = this._csr.top, bottomLineNum = this._csr.bottom;
+
+        console.info("top:" + topLineNum);
+
+        // 选择文本在显示区域下面 || 选择文本在显示区域上面
+        // 这两种情况都不用处理。
+        if(minLineNum < topLineNum && maxLineNum > bottomLineNum){
+            console.info("select: 选中的文本不在显示区域。")
+            return;
+        }
+
+        // 判断当前的displayLines中是否存在选中区域、
+        // selection anchorPoint Y绝对值
+        // displayRange Y绝对值
+
+        let startY: number, stopY: number;
+        if(topLineNum < minLineNum) {
+            startY = minLineNum;
+            stopY = bottomLineNum < maxLineNum ? bottomLineNum : maxLineNum;
+        } else {
+            startY = topLineNum;
+            stopY = bottomLineNum < maxLineNum ? bottomLineNum : maxLineNum;
+        }
+
+        // startY: 从0开始
+        // stopY: 从0开始
+        startY -= topLineNum;
+        stopY -= topLineNum;
+
+        const width = this.measuredTextWidth
+            , fullWidth = this._term.columns * width
+            , height = this.height
+            , anchorY = startY * height
+            , focusY = stopY * height;
+
+        let startX = 0, stopX = 0;
+        if(CommonUtils.indexPoint(selection.anchorPoint, selection.focusPoint)){
+            // startX第一行从selection.anchorPoint.x开始
+            // 其他行从0开始。
+            if(topLineNum <= minLineNum) {
+                startX = selection.anchorPoint.x;
+            }
+            // 最后一行为0
+            // 其他行为selection.focusPoint.x
+            if(bottomLineNum < maxLineNum){
+                stopX = fullWidth;
+            } else {
+                stopX = selection.focusPoint.x;
+            }
+        } else if(CommonUtils.reverseIndexPoint(selection.anchorPoint, selection.focusPoint)){
+            if(topLineNum <= minLineNum) {
+                startX = selection.focusPoint.x;
+            }
+            // 最后一行为0
+            // 其他行为selection.focusPoint.x
+            if(bottomLineNum < maxLineNum){
+                stopX = fullWidth;
+            } else {
+                stopX = selection.anchorPoint.x;
+            }
+        }
+
+        const anchorX = startX, focusX = stopX;
+
+        // 临时保存selection.ranges
+        let ranges = selection.ranges;
+        selection.clearRanges();
+
+        for(let y = anchorY,
+                x = 0,
+                w = 0,
+                yIndex = 0,
+                startIndex = 0,
+                stopIndex = -1,
+                i = 0; y <= focusY; y+=height, i++){
+            if(y == anchorY) {
+
+                if(y == focusY){
+                    // 全部在一行
+                    startIndex = Math.floor(anchorX / width);
+                    stopIndex = Math.floor(focusX / width);
+                    w = focusX - anchorX;       // 考虑占两个位置的emoji表情
+                } else {
+                    // 第一行
+                    startIndex = Math.floor(anchorX / width);
+                    stopIndex = -1;
+                    w = fullWidth - anchorX;
+                }
+                x = anchorX;
+            } else if(y == focusY){
+                // 最后一行
+                x = 0;
+                w = focusX;     // 考虑占两个位置的emoji表情
+                startIndex = 0;
+                stopIndex = Math.floor(focusX / width);
+            } else {
+                // 中间行
+                x = 0;
+                w = fullWidth;
+                startIndex = 0;
+                stopIndex = -1;
+            }
+
+            // if(ranges[i]
+            //     && CommonUtils.isSamePoint(ranges[i].startPoint, new SelectionPoint(x, y))
+            //     && CommonUtils.isSamePoint(ranges[i].stopPoint, new SelectionPoint(w + x, y))){
+            //     // console.info("第" + (i + 1) + "行不用渲染");
+            //     selection.ranges[i] = ranges[i];
+            //     continue;
+            // }
+
+            // [0, this._term.rows - 1]
+            yIndex = Math.floor(y / height);
+            // console.info("yIndex:" + yIndex + ", startIndex:" + startIndex + ", stopIndex:" + stopIndex);
+
+            let data_arr = this._active_buffer.display_buffer.lines[yIndex];
+            // yIndex最大值：this._term.rows - 1
+            if(yIndex > this._term.rows - 1){
+                // []
+                continue;
+            }
+
+            let selectedTextArray;
+            if(stopIndex == -1){
+                selectedTextArray = data_arr.slice(startIndex, data_arr.length);
+            } else {
+                selectedTextArray = data_arr.slice(startIndex, stopIndex);
+            }
+
+            // console.info(blocks);
+            // console.info(selectedBlocks);
+
+            // 清除当前行
+            // this.clearLine(yIndex + 1);
+            // if(this.selectionViewContext){
+            //     this.selectionViewContext.clearRect(w + x, y, fullWidth, this.height);
+            // }
+
+            // 如果第一行是空行的话，不用选中。
+            let selectedContent = this.handleSelectedContent(selectedTextArray);
+            // let textLength = selectedTextArray.length;
+            // if(y == anchorY && textLength == 0){
+            //     selection.ranges[i] = new SelectionRange(0, 0, 0, 0, "", 0);
+            //     continue;
+            // }
+
+
+            // console.info("selectedTextArray.length=" + selectedTextArray.length + ", focusX=" + (focusX / width));
+
+            // 如果focusX大于当前行的文本的坐标值的话，当前行全选。
+            // if(y == focusY){
+            //     if(textLength < Math.floor((focusX / width))){
+            //         w = fullWidth;
+            //     }
+            // }
+            // this.drawSelectedText(x, y, height, width);
+
+            this.drawLine(Math.floor(x / width)
+                , y
+                , this._active_buffer.display_buffer
+                , Math.floor((w + x) / width)
+                , true);
+
+            selection.ranges[i] = new SelectionRange(x, y, w + x, y, selectedContent.join(""));
+
+        }
+
+        // 判断哪行是多余的（被取消选中的）
+        // selection.ranges 和 ranges做对比
+        // if(selection.ranges.length < ranges.length){
+        //     // 取消选中的行应该是ranges.length - selection.ranges.length
+        //     for(let i = selection.ranges.length, len = ranges.length; i < len; i++){
+        //         if(this.selectionViewContext){
+        //             this.selectionViewContext.clearRect(ranges[i].startPoint.x,
+        //                 ranges[i].startPoint.y, ranges[i].stopPoint.x - ranges[i].startPoint.x, this.height);
+        //         }
+        //     }
+        // }
+
+
+
     }
 
 }
