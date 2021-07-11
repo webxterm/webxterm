@@ -1,4 +1,3 @@
-
 export class Composition {
 
     /**
@@ -63,7 +62,7 @@ export class Composition {
     /**
      * 重置
      */
-    reset(){
+    reset() {
         this.events = false;
         this.state = 0;
         this.update = "";

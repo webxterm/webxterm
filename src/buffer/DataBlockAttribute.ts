@@ -1,17 +1,17 @@
 /**
  * 数据块的属性
  */
-export const ATTR_MODE_NONE         = 0,
-            ATTR_MODE_BOLD          = 1,
-            ATTR_MODE_INVERSE       = 2,
-            ATTR_MODE_ITALIC        = 4,
-            ATTR_MODE_FAINT         = 8,
-            ATTR_MODE_UNDERLINE     = 16,
-            ATTR_MODE_SLOW_BLINK    = 32,
-            // ATTR_MODE_RAPID_BLINK   = 64,
-            ATTR_MODE_INVISIBLE     = 64,
-            ATTR_MODE_SELECTION     = 128;
-            // ATTR_MODE_CROSSED_OUT   = 256;
+export const ATTR_MODE_NONE = 0,
+    ATTR_MODE_BOLD = 1,
+    ATTR_MODE_INVERSE = 2,
+    ATTR_MODE_ITALIC = 4,
+    ATTR_MODE_FAINT = 8,
+    ATTR_MODE_UNDERLINE = 16,
+    ATTR_MODE_SLOW_BLINK = 32,
+    // ATTR_MODE_RAPID_BLINK   = 64,
+    ATTR_MODE_INVISIBLE = 64;
+
+// ATTR_MODE_CROSSED_OUT   = 256;
 
 export class DataBlockAttribute {
 
@@ -69,7 +69,7 @@ export class DataBlockAttribute {
     /**
      * 获取总和
      */
-    get sum(): number{
+    get sum(): number {
         return this.bold
             + this.inverse
             + this.italic
@@ -78,24 +78,23 @@ export class DataBlockAttribute {
             + this.slowBlink
             // + this.rapidBlink
             + this.invisible;
-            // + this.crossedOut;
+        // + this.crossedOut;
     }
 
-    reset(){
-        if(this.bold != 0) this.bold = 0;
-        if(this.inverse != 0) this.inverse = 0;
-        if(this.italic != 0) this.italic = 0;
-        if(this.faint != 0) this.faint = 0;
-        if(this.underline != 0) this.underline = 0;
-        if(this.slowBlink != 0) this.slowBlink = 0;
+    reset() {
+        if (this.bold != 0) this.bold = 0;
+        if (this.inverse != 0) this.inverse = 0;
+        if (this.italic != 0) this.italic = 0;
+        if (this.faint != 0) this.faint = 0;
+        if (this.underline != 0) this.underline = 0;
+        if (this.slowBlink != 0) this.slowBlink = 0;
         // if(this.rapidBlink != 0) this.rapidBlink = 0;
-        if(this.invisible != 0) this.invisible = 0;
+        if (this.invisible != 0) this.invisible = 0;
         // if(this.crossedOut != 0) this.crossedOut = 0;
 
-        if(this.colorClass != "") this.colorClass = "";
-        if(this.backgroundColorClass != "") this.backgroundColorClass = "";
+        if (this.colorClass != "") this.colorClass = "";
+        if (this.backgroundColorClass != "") this.backgroundColorClass = "";
     }
-
 
 
     /**

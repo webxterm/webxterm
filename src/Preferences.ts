@@ -166,7 +166,7 @@ export class Preferences {
 
     // 调色板方案
     private _paletteScheme: string = "";
-    private _paletteMap: {[name: string]: string} = {};
+    private _paletteMap: { [name: string]: string } = {};
 
     ////////////////// 终端 ////////////////
     // 终端类型
@@ -226,7 +226,8 @@ export class Preferences {
      */
     init(): void {
 
-        this.colorScheme = "Solarized light";
+        this.colorScheme = "Solarized dark";
+        // this.colorScheme = "Solarized light";
         this.boldColor = "#FF6666";
         this.highlightColor = "#FFFFFF";
         this.highlightBackgroundColor = "#000000";
@@ -246,7 +247,7 @@ export class Preferences {
         this.backgroundSize = "100% 100%";
 
         this.fontFamily = new CourierNew();
-        // this.fontFamily = new DejaVuSansMono();
+        // this.fontFamily = new UbuntuMono();
         this.fontSize = Preferences.defaultFontSize;
 
         this.showBoldTextInBrightColor = true;
@@ -266,7 +267,7 @@ export class Preferences {
         //                Specifies the number of lines to save beyond the top of the
         //                screen when a scrollbar is turned on.  The default is "1024".
         // max = 10240 lines
-        this.scrollBack = 10240;
+        this.scrollBack = 128000;
 
         // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
         this.tabSize = 8;  // 默认是8
@@ -707,7 +708,7 @@ export class Preferences {
         }, this.instanceId);
 
         // 获取字符的尺寸
-        if (this.terminal.init){
+        if (this.terminal.init) {
             this.terminal.measure();
             // if(this.terminal.printer.canvasRenderer.ready) this.terminal.printer.canvasRenderer.updateFontSize();
         }
@@ -721,7 +722,7 @@ export class Preferences {
         this._showBoldTextInBrightColor = value;
     }
 
-    get paletteMap(): {[name: string]: string} {
+    get paletteMap(): { [name: string]: string } {
         return this._paletteMap;
     }
 
@@ -792,21 +793,21 @@ export class Preferences {
      * 通过类名获取颜色值
      * @param className
      */
-    getColor(className: string){
+    getColor(className: string) {
 
-        if(className.charAt(0) === '_'){
+        if (className.charAt(0) === '_') {
             className = className.substring(1);
         }
 
         let index = -1;
-        for(let i = 0, len = Preferences.paletteColorNames.length; i < len; i++){
-            if(Preferences.paletteColorNames[i] === className){
+        for (let i = 0, len = Preferences.paletteColorNames.length; i < len; i++) {
+            if (Preferences.paletteColorNames[i] === className) {
                 index = i;
                 break;
             }
         }
 
-        if(index === -1){
+        if (index === -1) {
             return Color.parseColor("#" + className);
         } else {
             const colors = Preferences.paletteSchemes[this.paletteScheme];
@@ -855,12 +856,12 @@ export class Preferences {
     set scrollBack(value: number) {
         this._scrollBack = value;
 
-        if(value > 51200){
-            throw new Error("最大行数不能超过51200！");
-        }
+        // if (value > 51200) {
+        //     throw new Error("最大行数不能超过51200！");
+        // }
 
         // 设置最大滚动行数
-        if(this.terminal.bufferSet && this.terminal.bufferSet.normal){
+        if (this.terminal.bufferSet && this.terminal.bufferSet.normal) {
             this.terminal.bufferSet.normal.maxScrollBack = value;
         }
     }
@@ -902,7 +903,7 @@ export class Preferences {
     set scrollbar(value: boolean) {
         this._scrollbar = value;
 
-        if(!this._scrollbar){
+        if (!this._scrollbar) {
             // 不要滚动条
             Styles.add(".container", {
                 "overflow-y": "hidden"

@@ -23,13 +23,13 @@ export class OscParser {
             // Ps = 2  ⇒  Change Window Title to Pt.
             // Ps = 3  ⇒  Set X property on top-level window
             case 0:
-                if(this.terminal.eventMap["updateTitle"])
+                if (this.terminal.eventMap["updateTitle"])
                     this.terminal.eventMap["updateTitle"](params[1]);
                 break;
             case 1:
                 break;
             case 2:
-                if(this.terminal.eventMap["updateTitle"])
+                if (this.terminal.eventMap["updateTitle"])
                     this.terminal.eventMap["updateTitle"](params[1]);
                 break;
             case 3:

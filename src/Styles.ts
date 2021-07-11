@@ -157,7 +157,7 @@ export class Styles {
                     _selector = "";
                 }
 
-                if(_scoped !== "__global__"){
+                if (_scoped !== "__global__") {
                     cssHTML += ".webxterm[instance=\"" + _scoped + "\"] ";
                 } else {
                     cssHTML += ".webxterm ";
@@ -176,11 +176,11 @@ export class Styles {
 
             // 动画
             let keyframes = this.keyframes[_scoped];  // {}
-            for(const name in keyframes){
+            for (const name in keyframes) {
                 const value = " " + keyframes[name + ""];
                 let scoped2 = "";
 
-                if(_scoped !== "__global__"){
+                if (_scoped !== "__global__") {
                     scoped2 = "-" + _scoped;
                 }
                 cssHTML += "@keyframes " + name + scoped2 + value;
@@ -196,7 +196,7 @@ export class Styles {
 
     public update2(): void {
 
-        for(const scoped in this.cursorCssObj){
+        for (const scoped in this.cursorCssObj) {
             const _scoped = scoped + "";
             const _scopeCursorObj = this.cursorCssObj[_scoped];
 
@@ -209,7 +209,7 @@ export class Styles {
 
             let cssHTML = "";
 
-            for(const selector in _scopeCursorObj){
+            for (const selector in _scopeCursorObj) {
                 let _selector = selector + "";
                 const _selectorObj = _scopeCursorObj[_selector];
 

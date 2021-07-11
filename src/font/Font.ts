@@ -1,4 +1,3 @@
-
 export class Font {
 
     protected fontSizes: { [pt: string]: number[] } = {};

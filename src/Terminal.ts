@@ -10,16 +10,18 @@ import {Transceiver} from "./Transceiver";
 import {Parser} from "./parser/Parser";
 import {EventHandler} from "./input/EventHandler";
 import {Cursor} from "./Cursor";
-import {BufferSet} from "./buffer/BufferSet";
+import {BufferPoolSet} from "./buffer/BufferPoolSet";
 // import {EventLog} from "./input/EventLog";
 import {EscapeSequenceParser} from "./parser/EscapeSequenceParser";
 import {OscParser} from "./parser/OscParser";
 import {SSHServerInfo} from "./SSHServerInfo";
-import {CanvasSelection} from "./CanvasSelection";
+import {CanvasSelection} from "./selection/CanvasSelection";
 import {Composition} from "./input/Composition";
 import {CanvasTextRenderer} from "./renderer/CanvasTextRenderer";
 import {CanvasSelectionRenderer} from "./renderer/CanvasSelectionRenderer";
 import {CanvasCursorRenderer} from "./renderer/CanvasCursorRenderer";
+import {EmojiParser} from "./parser/EmojiParser";
+import {CanvasSelectionSelectType} from "./selection/CanvasSelectionSelectType";
 
 export enum RenderType {
     HTML, CANVAS
@@ -100,6 +102,8 @@ export class Terminal {
 
     // 解析器
     readonly parser: Parser;
+    // emoji解析器
+    readonly emojiParser: EmojiParser;
     // 序列解析器
     readonly esParser: EscapeSequenceParser;
     // 系统命令解析器
@@ -111,12 +115,12 @@ export class Terminal {
 
     // 渲染器
     // 文本渲染器、内容选择渲染器、光标渲染器
-    textRenderer: CanvasTextRenderer | undefined;
-    selectionRenderer: CanvasSelectionRenderer | undefined;
-    cursorRenderer: CanvasCursorRenderer | undefined;
+    private _textRenderer: CanvasTextRenderer | undefined;
+    private _selectionRenderer: CanvasSelectionRenderer | undefined;
+    private _cursorRenderer: CanvasCursorRenderer | undefined;
 
     // 缓冲区
-    readonly bufferSet: BufferSet;
+    readonly bufferSet: BufferPoolSet;
     // 时间记录器
     // readonly eventLog: EventLog;
     // 偏好设置
@@ -175,13 +179,14 @@ export class Terminal {
         this.parser = new Parser(this);
         this.esParser = new EscapeSequenceParser(this, this.parser);
         this.oscParser = new OscParser(this, this.parser);
+        this.emojiParser = new EmojiParser();
 
         // 事件处理
         this.eventHandler = new EventHandler();
         this.eventHandler.listen(this);
 
         // 设置活跃缓冲区为当前的默认缓冲区
-        this.bufferSet = new BufferSet();
+        this.bufferSet = new BufferPoolSet();
 
         // 时间记录
         // this.eventLog = new EventLog();
@@ -254,12 +259,11 @@ export class Terminal {
         this.measureSpan.className = 'measure';
         this.measureDiv.appendChild(this.measureSpan);
 
-        if(this.renderType === RenderType.CANVAS){
+        if (this.renderType === RenderType.CANVAS) {
 
             // 滚动容器
             this.scrollView.className = "scroll-view";
             this.scrollView.appendChild(this.scrollArea);
-            // this.scrollView.style.overflowY = "scroll";
 
             this.scrollArea.className = "scroll-area";
             this.container.appendChild(this.scrollView);
@@ -342,8 +346,8 @@ export class Terminal {
      * 添加行
      * @param newChild
      */
-    private append(newChild: Node){
-        if(this.renderType === RenderType.HTML) {
+    private append(newChild: Node) {
+        if (this.renderType === RenderType.HTML) {
             this.viewport.appendChild(newChild);
         }
     }
@@ -366,7 +370,7 @@ export class Terminal {
      * 将输入存入消息队列中
      * @param data
      */
-    pushMessage(data: string){
+    pushMessage(data: string) {
         this.messageQueue.push(data);
         this.startPrinter();
     }
@@ -375,9 +379,9 @@ export class Terminal {
      * 初始化渲染器
      */
     private initRenderer() {
-        this.cursorRenderer = new CanvasCursorRenderer(this);
-        this.textRenderer = new CanvasTextRenderer(this);
-        this.selectionRenderer = new CanvasSelectionRenderer(this);
+        this._cursorRenderer = new CanvasCursorRenderer(this);
+        this._textRenderer = new CanvasTextRenderer(this);
+        this._selectionRenderer = new CanvasSelectionRenderer(this);
     }
 
 
@@ -400,7 +404,7 @@ export class Terminal {
         this.bufferSet.normal.maxScrollBack = this._preferences.scrollBack;
 
         // 终端已就绪
-        if(!this.isReady){
+        if (!this.isReady) {
             this.initRenderer();
             this.isReady = true;
         }
@@ -414,11 +418,11 @@ export class Terminal {
             this.echo(this.messageQueue.splice(0, this.messageQueue.length).join(""))
         }
 
-        if (!!this.wsServer){
+        if (!!this.wsServer) {
             this.connectServer();
         }
 
-        if(this.measureDiv.isConnected) this.measureDiv.remove();
+        if (this.measureDiv.isConnected) this.measureDiv.remove();
     }
 
     /**
@@ -441,7 +445,7 @@ export class Terminal {
 
         this.resizeRemote();
 
-        if(this.renderType == RenderType.CANVAS){
+        if (this.renderType == RenderType.CANVAS) {
             this.updateViewport();
 
             if(this.textRenderer) this.textRenderer.resize(this._rows, this._columns);
@@ -451,13 +455,13 @@ export class Terminal {
             // 计算滚动区的高度、
             this.updateScrollAreaHeight();
 
-        } else if(this.renderType == RenderType.HTML){
+        } else if (this.renderType == RenderType.HTML) {
             // if (fragment) this.viewport.appendChild(fragment);
         }
 
         // 重置
-        if(this.selection.running){
-            if(this.selectionRenderer) this.selectionRenderer.select(this.selection);
+        if (this.selection.running) {
+            if (this._selectionRenderer) this._selectionRenderer.select();
         }
 
         // 滚动到底部
@@ -466,10 +470,32 @@ export class Terminal {
     }
 
     // 计算滚动区的高度、
-    updateScrollAreaHeight(){
-        Styles.add(".scroll-view .scroll-area", {
-            "height": this._charHeight * (this.bufferSet.normal.saved_buffer.lines.length + this.bufferSet.activeBuffer.size) + "px"
-        }, this.instanceId);
+    updateScrollAreaHeight() {
+        // 如果是普通缓冲区的话，
+        // 滚动区域的高度为保留区 + 编辑区
+        let lineSize;
+        if(this.bufferSet.isNormal){
+            lineSize = this.bufferSet.normal.saved_buffer.size + this.bufferSet.activeBuffer.size;
+        } else {
+            // 备用缓冲区的话，普通缓冲区的保留区 + 普通缓冲区的编辑区 + 备用缓冲区的编辑区
+            lineSize = this.bufferSet.normal.saved_buffer.size + this.bufferSet.normal.size + this.bufferSet.activeBuffer.size;
+        }
+
+        // Styles.add(".scroll-view .scroll-area", {
+        //     "height": this._charHeight * lineSize + "px"
+        // }, this.instanceId);
+        this.scrollArea.style.height = this._charHeight * lineSize + "px";
+
+        // if(this.bufferSet.normal.saved_buffer.size) {
+        //     console.info("test...")
+        //
+        // }
+
+        // safari 会出现第一次出现的内容超过滚动条的时候，滚动条被隐藏，因此需要每次渲染、
+        // this.scrollView.className = "";
+        // setTimeout(() => {
+        //     this.scrollView.className = "scroll-view";
+        // }, 0);
     }
 
     /**
@@ -492,9 +518,9 @@ export class Terminal {
     /**
      * 获取度量div的宽度
      */
-    get measureDivWidth(){
+    get measureDivWidth() {
         // 获取行数
-        if(!this.measureDiv.parentElement){
+        if (!this.measureDiv.parentElement) {
             this.scrollView.appendChild(this.measureDiv);
         }
         return this.measureDiv.getBoundingClientRect().width
@@ -536,7 +562,8 @@ export class Terminal {
      * @param value
      */
     set charHeight(value: number) {
-        if(this.renderType === RenderType.CANVAS){
+        value = Math.ceil(value);
+        if (this.renderType === RenderType.CANVAS) {
             value += this._preferences.fontFamily.getLineHeight();
         }
 
@@ -653,9 +680,9 @@ export class Terminal {
             }));
 
         }).catch((e) => {
-            if(e instanceof Event){
+            if (e instanceof Event) {
                 this.eventMap["connect"]("fail", `无法建立到 ${this.wsServer} 服务器的连接。`);
-            } else if(e instanceof CloseEvent){
+            } else if (e instanceof CloseEvent) {
                 this.eventMap["connect"]("close", "连接关闭！");
             }
 
@@ -701,11 +728,11 @@ export class Terminal {
             this.messageQueueTimer = 0;
 
             // 如果终端没有就绪的话，就不要输出。
-            if(!this.isReady){
+            if (!this.isReady) {
                 return;
             }
             const len = this.messageQueue.length;
-            if(len > 0) {
+            if (len > 0) {
                 const chunk = this.messageQueue.splice(0, len);
                 this.echo(chunk.join(""), () => {
                     // this.sshWorker.postMessage({
@@ -723,7 +750,7 @@ export class Terminal {
      * 虚拟响铃，通过修改背景颜色实现。
      */
     bell() {
-        if(this.renderType == RenderType.HTML){
+        if (this.renderType == RenderType.HTML) {
             this.container.style.backgroundColor = this._preferences.visualBellColor;
             this.container.style.transition = "0.25s";
             setTimeout(() => {
@@ -792,9 +819,9 @@ export class Terminal {
      * 滚动到底部
      */
     scrollToBottom() {
-        if(this.renderType == RenderType.HTML){
+        if (this.renderType == RenderType.HTML) {
             // this.container.scrollTop = this.container.scrollHeight;
-        } else if(this.renderType == RenderType.CANVAS){
+        } else if (this.renderType == RenderType.CANVAS) {
             this.scrollView.scrollTop = this.scrollView.scrollHeight;
         }
 
@@ -805,7 +832,7 @@ export class Terminal {
      */
     addBufferFillRows() {
 
-        if(this.renderType === RenderType.HTML){
+        if (this.renderType === RenderType.HTML) {
 
             // let fragment = document.createDocumentFragment();
             // const lines = this.bufferSet.activeBuffer.lines;
@@ -814,7 +841,7 @@ export class Terminal {
             // }
             // this.viewport.appendChild(fragment);
 
-        } else if(this.renderType == RenderType.CANVAS){
+        } else if (this.renderType == RenderType.CANVAS) {
 
             // 添加行
 
@@ -875,7 +902,6 @@ export class Terminal {
         this.cursorView.width = width2;
 
 
-
     }
 
     updateHeight(value: number) {
@@ -890,7 +916,7 @@ export class Terminal {
         let winHeight = this._rows * value;
 
         const gap = height - winHeight;
-        if(gap < this.min_gap_with_bottom){
+        if (gap < this.min_gap_with_bottom) {
             // 小于最小间隙。
             this._rows -= 1;
             winHeight = this._rows * value;
@@ -925,7 +951,7 @@ export class Terminal {
     /**
      * 获取滚动视图的scrollTop
      */
-    get scrollViewScrollTop(): number{
+    get scrollViewScrollTop(): number {
         const scrollTop = this.scrollView.scrollTop
             , height = this.scrollView.getBoundingClientRect().height
             , viewport_height = this.viewport.getBoundingClientRect().height;
@@ -960,10 +986,129 @@ export class Terminal {
      * |                     |
      *  ---------------------
      * 通过上面buffer中可以看到，offset最小是0，最大是保留区的长度。
+     *
+     * scrollView 为 div，无倍数
      */
-    getOffsetTop(){
-        return Math.ceil(this.scrollView.scrollTop / this.charHeight);
+    getOffsetTop() {
+        // let h = this.scrollView.getBoundingClientRect().height - this.viewport.getBoundingClientRect().height;
+        const scrollTop = this.scrollView.scrollTop;
+        return Math.ceil(scrollTop / this.charHeight);
+    }
+
+    /**
+     * 获取到顶部的距离
+     * text-view 为 canvas，有倍数，需要 * this._preferences.canvasSizeMultiple
+     */
+    measureOffsetTop() {
+        return this.getOffsetTop() * (this.charHeight * this._preferences.canvasSizeMultiple);
+    }
+
+    measureOffsetTop2(topIndex: number): number{
+        return topIndex * (this.charHeight * this._preferences.canvasSizeMultiple);
+    }
+
+    /**
+     * 发出选择
+     */
+    emitSelect(selectType: CanvasSelectionSelectType){
+        if(!this.selectionRenderer) {
+            return;
+        }
+
+        switch (selectType) {
+            case CanvasSelectionSelectType.CANCEL:
+                // 取消选择
+                this.selectionRenderer.cancel();
+                // if(this.textRenderer) {
+                //     this.textRenderer.flush();
+                // }
+                break;
+            case CanvasSelectionSelectType.ALL:
+                // 全部选择
+                this.selection.running = true;
+                let end = this.bufferSet.normal.saved_buffer.size + this.bufferSet.normal.change_buffer.size;
+                if(this.bufferSet.isAlt){
+                    end += this.bufferSet.alt.change_buffer.size;
+                }
+                this.bufferSet.updateSelectVersion(0, end, this.selection.version);
+                this.selection.startY = 0;
+                this.selection.stopY = end;
+
+                // this.updateSelectVersion();
+                this.selectionRenderer.selectAll();
+                break;
+            case CanvasSelectionSelectType.NORMAL:
+                // 正常选择
+                this.selection.running = true;
+                this.updateSelectVersion();
+                this.selectionRenderer.select();
+                break;
+            case CanvasSelectionSelectType.LINE:
+                // 行选择
+                this.selection.running = true;
+                this.updateSelectVersion();
+                this.selectionRenderer.selectLine();
+                break;
+            case CanvasSelectionSelectType.BLOCK:
+                // 双击词汇选择
+                this.selection.running = true;
+                this.updateSelectVersion();
+                this.selectionRenderer.selectBlock();
+                break;
+
+        }
+
     }
 
 
+
+    updateSelectVersion(): void{
+        let startIndex = 0, endIndex = 0;
+
+        if(this.selection.anchorPoint2 && this.textRenderer){
+            startIndex = this.textRenderer.calcStartLineY(this.selection.anchorPoint2.pageY);
+        }
+
+        if(this.selection.focusPoint2 && this.textRenderer){
+            endIndex = this.textRenderer.calcStartLineY(this.selection.focusPoint2.pageY);
+        }
+
+        if(startIndex > endIndex){
+            // 反向选择
+            // startIndex = 10
+            // endIndex = 3
+            this.bufferSet.updateSelectVersion(endIndex,  startIndex + 1, this.selection.version);
+            this.selection.startY = endIndex;
+            this.selection.stopY = startIndex + 1;
+        } else {
+            // 正向选择
+            // startIndex = 3
+            // endIndex = 10
+            this.bufferSet.updateSelectVersion(startIndex, endIndex + 1, this.selection.version);
+            this.selection.startY = startIndex;
+            this.selection.stopY = endIndex + 1;
+        }
+
+
+    }
+
+    /**
+     * 是否为画布渲染模式
+     */
+    isCanvasMode(): boolean {
+        return this.renderType == RenderType.CANVAS;
+    }
+
+
+    get textRenderer(): CanvasTextRenderer  | undefined {
+        return this._textRenderer;
+    }
+
+    get selectionRenderer(): CanvasSelectionRenderer  | undefined {
+        return this._selectionRenderer;
+    }
+
+    get cursorRenderer(): CanvasCursorRenderer | undefined {
+        return this._cursorRenderer;
+    }
 }

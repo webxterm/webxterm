@@ -5,9 +5,14 @@
     <title>Title</title>
 </head>
 <body>
+    <div style="height: 100px; width: 100px; overflow-y: scroll; overflow-x: hidden; background: red; position: absolute; left: 0; top: 0; ">
+        <div id="aaa" style="height: 100px; width: 100px; background: yellow"></div>
+    </div>
     <script>
 
-
+        setTimeout(()=>{
+            document.getElementById("aaa").style.height = "200px";
+        }, 1000);
 
         // const c = 100000000;
         // let a = new Array(c);

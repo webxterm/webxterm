@@ -1,372 +1,157 @@
-/**
- * buffer：存储多个BufferChain
- * Buffer = [ BufferLine = [block, block, block], BufferLine, BufferLine, BufferLine, BufferLine, ...]
- */
-import {
-    DataBlockAttribute
-} from "./DataBlockAttribute";
-import {LineBuffer} from "./LineBuffer";
+import {ATTR_MODE_NONE, DataBlockAttribute} from "./DataBlockAttribute";
+import {IdCounter} from "../common/IdCounter";
 
 /**
- *  memory buffer
- *
- *  ---------------------
- * |                     |
- * |    saved lines      |
- * |                     |
- *  ---------------------
- * | ___ buffer line ___ |
- * |                     |
- * |       buffer        |
- * |                     |
- *  ---------------------
- *
+ * 行缓冲区
  */
-
-
 export class Buffer {
 
-    // 缓冲区
-    private readonly _change_buffer: LineBuffer;
-    // 保留区
-    private readonly _saved_buffer: LineBuffer;
-    // 显示区
-    private readonly _display_buffer: LineBuffer;
-    // 回滚区
-    // private readonly _undo_buffer: LineBuffer;
-
     // 缓冲区类型
-    private readonly type: string;
+    private readonly type: string = "";
 
-    // 横坐标
-    private _x: number = 0;
-    private _y: number = 0;
+    // 初始化行数
+    private readonly _initLineSize: number = 0;
 
-    // 高水位，针对y坐标的最大值
-    private _high_water: number = 0;
+    // 缓冲区的所有行
+    private _lineChars: string[][];
 
-    // 行
-    private _rows: number = 0;
-    private _columns: number = 0;
+    // 字符显示宽度，默认是1，可选值为0（当为中文字符的时候，下一个占位符的宽度就是0），1，2，3，4...127？
+    private _lineCharWidths: number[][];
 
-    private _savedX: number = 0;
-    private _savedY: number = 0;
+    // 行字符属性, 最小是0，最大为255
+    private _lineCharAttrs: number[][];
 
-    // Set Scrolling Region [top;bottom] (default = full size of window) (DECSTBM), VT100.
-    private _scrollTop: number = 0;
-    private _scrollBottom: number = 0;
+    // 字符前景颜色
+    private _lineCharColors: string[][];
 
-    // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-The-Alternate-Screen-Buffer
-    // 是否可以滚动
-    readonly scrollBack: boolean = false;
+    // 字符背景颜色
+    private _lineCharBgColors: string[][];
 
-    // 最大滚动行数，默认为0的话，是无限制
-    private _maxScrollBack: number = -1;
+    // 行编号，不会改变，只会一直增加
+    // 表示方式：
+    // 1, 负数为软换行
+    // 2, 正数表示行id
+    private _lineIds: number[];
 
-    // 是否等待重置缓冲区
-    private _resize_wait = false;
+    // 行选择版本号，默认是0
+    // 两种情况会出现增加：
+    // 1, 选择内容
+    // 选择内容按照 @{CanvasSelection.version} 判断
+    private _lineVersions: number[];
 
-    constructor(rows: number, columns: number, scrollBack: boolean, type: string = "") {
-        this._rows = rows;
-        this._columns = columns;
+    // 行属性，当前的行编号，正常的，只有change_buffer会调用改方法。其他buffer将会一直是0
+    // private _lineId: number = 0;
+
+
+    constructor(init_line_size: number = 0, type: string = "") {
+        this._initLineSize = init_line_size;
+
+        this._lineChars = new Array(init_line_size);
+        this._lineCharWidths = new Array(init_line_size);
+        this._lineCharAttrs = new Array(init_line_size);
+        this._lineCharColors = new Array(init_line_size);
+        this._lineCharBgColors = new Array(init_line_size);
+        this._lineIds = new Array(init_line_size);
+        this._lineVersions = new Array(init_line_size);
+
         this.type = type;
-        this.scrollBack = scrollBack;
-
-        this.scrollTop = 1;
-        this.scrollBottom = this._rows;
-
-        // 设置默认坐标点为1,1，原点为左上角。
-        // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
-        // Cursor Position [row;column] (default = [1,1]) (CUP).
-        this.y = 1;
-        this.x = 1;
-        this._high_water = 1;
-        // this.blankBlocks = Array.from({length:columns}, () => Buffer.newBlankBlock());
-
-        this._change_buffer = new LineBuffer(rows, "change_buffer");
-        this._saved_buffer = new LineBuffer(0, "saved_buffer");
-        this._display_buffer = new LineBuffer(0, "display_buffer");
-        // this._undo_buffer = new LineBuffer(0, "undo_buffer");
-    }
-
-    get x(): number {
-        return this._x;
-    }
-
-    set x(value: number) {
-        this._x = value;
-        // this._dirtyLines[value - 1] = 1;
-    }
-
-    get y(): number {
-        return this._y;
-    }
-
-    set y(value: number) {
-        this._y = value;
-        if (this._high_water < value) {
-            this._high_water = value;
-        }
-    }
-
-    get high_water(): number {
-        return this._high_water;
-    }
-
-    resetHighWater() {
-        this._high_water = 1;
-    }
-
-    get savedX(): number {
-        return this._savedX;
-    }
-
-    set savedX(value: number) {
-        this._savedX = value;
-    }
-
-    get savedY(): number {
-        return this._savedY;
-    }
-
-    set savedY(value: number) {
-        this._savedY = value;
-    }
-
-    get maxScrollBack(): number {
-        return this._maxScrollBack;
-    }
-
-    set maxScrollBack(value: number) {
-        this._maxScrollBack = value;
-    }
-
-    get resize_wait(): boolean {
-        return this._resize_wait;
-    }
-
-    set resize_wait(value: boolean) {
-        this._resize_wait = value;
-    }
-
-    reset() {
-        this._change_buffer.reset();
-        this._saved_buffer.reset();
-        this._display_buffer.reset();
-    }
-
-    get size(): number {
-        return this._change_buffer.lines.length;
-    }
-
-    get scrollTop(): number {
-        return this._scrollTop;
-    }
-
-    set scrollTop(value: number) {
-        this._scrollTop = value;
-    }
-
-    get scrollBottom(): number {
-        return this._scrollBottom;
-    }
-
-    set scrollBottom(value: number) {
-        this._scrollBottom = value;
-    }
-
-    get rows(): number {
-        return this._rows;
-    }
-
-    get columns(): number {
-        return this._columns;
-    }
-
-    get change_buffer(): LineBuffer {
-        return this._change_buffer;
-    }
-
-    get saved_buffer(): LineBuffer {
-        return this._saved_buffer;
-    }
-
-    get display_buffer(): LineBuffer {
-        return this._display_buffer;
-    }
-
-    // get undo_buffer(): LineBuffer {
-    //     return this._undo_buffer;
-    // }
-
-    /**
-     * 重置缓冲区大小
-     * @param newRows
-     * @param newCols
-     */
-    resize(newRows: number, newCols: number) {
-        this._scrollBottom = newRows;
-        const currentRows = this.size;
-        const currentCols = this.columns;
-
-        if (currentRows != newRows) {
-            // 将缓冲区的所有行移动到保留区中
-            // 合并缓冲区的行到保留区
-            this._change_buffer.moveAllLineTo(this._saved_buffer);
-            // 将需要的行移动到缓冲区
-            let start = this._saved_buffer.lines.length - newRows;
-            this._saved_buffer.moveLineTo(this._change_buffer, start < 0 ? 0: start, newRows);
-
-            // 当前缓冲区的行数
-            const cur_buf_row_count = this._change_buffer.lines.length;
-            if (currentRows < newRows) {
-                // 窗口的高度放大。 24 -> 25
-                this._y += cur_buf_row_count - currentRows;
-
-                // 剩余多少行没有添加，意思是保留区是空的。
-                const appendRowCount = newRows - cur_buf_row_count;
-                if (appendRowCount > 0) {
-                    // 添加空行
-                    this.appendLine(appendRowCount);
-                }
-
-            } else if (currentRows > newRows) {
-                // 窗口的高度缩小。 如 25 -> 24
-                console.info("窗口的高度缩小: _y:"+this._y+", currentRows:" + currentRows + ", newRows:" + newRows);
-                if(this._y > (currentRows - newRows)){
-                    this._y -= (currentRows - newRows);
-                }
-                console.info("窗口的高度缩小: _y:" + this._y);
-            }
-        }
-
-        if (currentCols > newCols) {
-            // 删除列
-            for (let i = 0; i < this._rows; i++) {
-                this.remove(i, newCols, currentCols - newCols);
-            }
-
-        } else if (currentCols < newCols) {
-            // 添加列
-            for (let i = 0; i < this._rows; i++) {
-                this.append(i, newCols - currentCols);
-            }
-
-        }
-
-        this._columns = newCols;
-        this._rows = newRows;
-    }
-
-    clear(): void {
-        this.y = 1;
-        this.x = 1;
-        this.scrollTop = 1;
-        this.scrollBottom = this._rows;
     }
 
     /**
-     * 插入空行
-     * @param start 开始的索引
-     * @param count 插入多少行
-     */
-    insertLine(start: number, count: number): void {
-        for (let i = 0; i < count; i++) {
-            this._change_buffer.insertLine(start + i, this.columns);
-        }
-    }
-
-    /**
-     * 附加多少空行，在数组尾部添加
-     * @param count
-     */
-    appendLine(count: number = 1): void {
-        // 插入多行
-        for (let i = 0; i < count; i++) {
-            this._change_buffer.appendLine(this._columns);
-        }
-    }
-
-    /**
-     * 删除行
-     * @param start
-     * @param count
-     * @param scroll_back 是否将删除的行添加到保留区中
-     */
-    removeLine(start: number, count: number, scroll_back: boolean = false): void {
-        if (scroll_back && this.scrollBack) {
-            this._change_buffer.moveLineTo(this._saved_buffer, start, count);
-            if (this._saved_buffer.lines.length > this.maxScrollBack) {
-                // 直接将第一行删除。
-                this._saved_buffer.removeLine(0, 1);
-            }
-        } else {
-            this._change_buffer.removeLine(start, count);
-        }
-
-    }
-
-    /**
-     * 抹除行
-     * @param y
-     * @param blockAttr 属性
-     */
-    eraseLine(y: number, blockAttr: DataBlockAttribute): void {
-        if (!this._change_buffer.lines[y - 1]) {
-            console.info("eraseLine:this._lines[y - 1]" + this._change_buffer.lines[y - 1]);
-            return;
-        }
-        for (let xIndex = 0, len = this._change_buffer.lines[y - 1].length; xIndex < len; xIndex++) {
-            this.replace(y - 1, xIndex, 1, blockAttr, " ");
-        }
-    }
-
-    /**
-     * 向缓冲区添加行
-     */
-    fillRows(): void {
-        if (!this._rows) {
-            throw new Error("this._rows is " + this._rows);
-        } else {
-            for (let y = 0; y < this._rows; y++) {
-                this._change_buffer.replaceLine(y, this.columns);
-            }
-        }
-    }
-
-    /**
-     * 移除行的某些块。
-     * @param yIndex y的索引
-     * @param start 开始的索引
-     * @param deleteCount
-     */
-    remove(yIndex: number, start: number, deleteCount: number): void {
-        this._change_buffer.remove(yIndex, start, deleteCount);
-    }
-
-    /**
-     * 给指定的行添加块
+     * 更新为软换行
      * @param yIndex
-     * @param count
      */
-    append(yIndex: number, count: number) {
-        this._change_buffer.append(yIndex, count);
+    update2SoftLine(yIndex: number){
+        this.lineIds[yIndex] = - this.lineIds[yIndex];
     }
 
+    /**
+     * 重置
+     */
+    reset() {
+        this._lineChars = new Array(this._initLineSize);
+        this._lineCharWidths = new Array(this._initLineSize);
 
-    // /**
-    //  * 在指定的位置插入块
-    //  * @param yIndex
-    //  * @param xIndex
-    //  * @param charWidth 字符宽度，默认是1
-    //  * @param dataAttr
-    //  * @param blocksData
-    //  */
-    // insert(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, ...blocksData: string[]) {
-    //     for (let i = 0, len = blocksData.length; i < len; i++) {
-    //         this._change_buffer.insert(yIndex, xIndex + i, charWidth, dataAttr, blocksData[i]);
-    //     }
+        this._lineCharAttrs = new Array(this._initLineSize);
+        this._lineCharColors = new Array(this._initLineSize);
+        this._lineCharBgColors = new Array(this._initLineSize);
+
+        this._lineIds = new Array(this._initLineSize);
+        this._lineVersions = new Array(this._initLineSize);
+    }
+
+    // 正常的，只有change_buffer会调用改方法。
+    // get current_id(): number {
+    //     return ++this._lineId;
     // }
+
+
+    get lineChars(): string[][] {
+        return this._lineChars;
+    }
+
+    get lineCharWidths(): number[][] {
+        return this._lineCharWidths;
+    }
+
+    get lineCharAttrs(): number[][] {
+        return this._lineCharAttrs;
+    }
+
+    get lineCharColors(): string[][] {
+        return this._lineCharColors;
+    }
+
+    get lineCharBgColors(): string[][] {
+        return this._lineCharBgColors;
+    }
+
+    // get lineId(): number {
+    //     return this._lineId;
+    // }
+
+    get lineIds(): number[] {
+        return this._lineIds;
+    }
+
+    get lineVersions(): number[] {
+        return this._lineVersions;
+    }
+
+    get size() {
+        return this._lineChars.length;
+    }
+
+    getId(index: number): number{
+        return this._lineIds[index];
+    }
+
+    newItems<T>(initVal: T, columns: number = 0): T[] {
+        return Array.from({length: columns}, () => initVal);
+    }
+
+    //////////////////////////////////////////////////////////////////////////
+    // 列
+    //////////////////////////////////////////////////////////////////////////
+
+    /**
+     * 替换某一个块
+     * @param yIndex
+     * @param xIndex
+     * @param charWidth
+     * @param dataAttr
+     * @param data
+     */
+    replace(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, data: string): void {
+        this.checkLine(yIndex);
+
+        this._lineChars[yIndex][xIndex] = data;
+        this._lineCharAttrs[yIndex][xIndex] = dataAttr.sum;
+        this._lineCharWidths[yIndex][xIndex] = charWidth;
+        this._lineCharColors[yIndex][xIndex] = dataAttr.colorClass;
+        this._lineCharBgColors[yIndex][xIndex] = dataAttr.backgroundColorClass;
+
+    }
 
     /**
      * 更新块信息
@@ -376,68 +161,220 @@ export class Buffer {
      * @param dataAttr
      * @param blocksData
      */
-    replace(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, ...blocksData: string[]) {
+    replace_more(yIndex: number, xIndex: number, charWidth: number = 1, dataAttr: DataBlockAttribute, ...blocksData: string[]) {
         for (let i = 0, len = blocksData.length; i < len; i++) {
-            this._change_buffer.replace(yIndex, xIndex + i, charWidth, dataAttr, blocksData[i]);
+            this.replace(yIndex, xIndex + i, charWidth, dataAttr, blocksData[i]);
         }
     }
 
     /**
-     * 抹除某一个数据块
+     * 追加一个块
      * @param yIndex
-     * @param xIndex
-     * @param blockAttr
+     * @param count
+     * @param charWidth
      */
-    erase(yIndex: number, xIndex: number, blockAttr: DataBlockAttribute) {
-        const block = this._change_buffer.lines[yIndex][xIndex];
-        if (!block && block.length == 0) {
-            // 如果当前清掉的是中文占位符，则需要把上一个中文清掉。
-            // Demo：echo -e '😙\x08\x1b[K'
-            try {
-                this.replace(yIndex, xIndex - 1, 1, blockAttr, " ");
-            } catch (e) {
-            }
-        }
-        this.replace(yIndex, xIndex, 1, blockAttr, " ");
+    append(yIndex: number, count: number, charWidth: number = 1): void {
+        this.checkLine(yIndex);
+
+        this._lineChars[yIndex].push(...this.newItems(" ", count));
+        this._lineCharAttrs[yIndex].push(...this.newItems(ATTR_MODE_NONE, count));
+        this._lineCharWidths[yIndex].push(...this.newItems(charWidth, count));
+
+        this._lineCharColors[yIndex].push(...this.newItems("", count));
+        this._lineCharBgColors[yIndex].push(...this.newItems("", count));
+
+    }
+
+    /**
+     * 移除一个块
+     * @param yIndex
+     * @param start
+     * @param deleteCount
+     */
+    remove(yIndex: number, start: number, deleteCount: number): void {
+        this.checkLine(yIndex);
+
+        this._lineChars[yIndex].splice(start, deleteCount);
+        this._lineCharAttrs[yIndex].splice(start, deleteCount);
+        this._lineCharWidths[yIndex].splice(start, deleteCount);
+
+        this._lineCharColors[yIndex].splice(start, deleteCount);
+        this._lineCharBgColors[yIndex].splice(start, deleteCount);
+
     }
 
 
+    //////////////////////////////////////////////////////////////////////////
+    // 行
+    //////////////////////////////////////////////////////////////////////////
+
     /**
-     * 将缓冲区的某一行复制到undo缓冲区中
+     * 检查行是否存在
      * @param yIndex
      */
-    // copy_change_buffer_to_undo_buffer(yIndex: number){
-    //     this.change_buffer.checkLine(yIndex);
-    //
-    //     // 复制行, 非地址引用，slice
-    //     // 如果行不在undo缓冲区内，则添加
-    //     for(let i = 0, len = this._undo_buffer.line_ids.length; i < len; i++) {
-    //         if(this._undo_buffer.line_ids[i] == this._change_buffer.line_ids[yIndex]){
-    //             // 行已存在
-    //             this._undo_buffer.removeLine(i, 1);
-    //             break;
-    //         }
-    //     }
-    //
-    //     this._undo_buffer.copyLineFrom(this._change_buffer, yIndex);
-    //
-    // }
+    checkLine(yIndex: number): boolean {
+        if (!this._lineChars[yIndex]) throw new Error("Buffer._lineChars: rownum=" + yIndex + " is not exists");
+        if (!this._lineCharAttrs[yIndex]) throw new Error("Buffer._lineCharAttrs: rownum=" + yIndex + " is not exists");
+        if (!this._lineCharWidths[yIndex]) throw new Error("Buffer._lineCharWidths: rownum=" + yIndex + " is not exists");
+        if (!this._lineCharColors[yIndex]) throw new Error("Buffer._lineCharColors: rownum=" + yIndex + " is not exists");
+        if (!this._lineCharBgColors[yIndex]) throw new Error("Buffer._lineCharBgColors: rownum=" + yIndex + " is not exists");
+        return true;
+    }
 
     /**
-     * 回滚某一行
+     * 插入一行（空行）
+     * @param start
+     * @param columns
+     * @param charWidth
      */
-    // rollback(){
-    //     if(this._undo_buffer.size == 0) return;
-    //     const count = this._change_buffer.line_ids.length;
-    //     for(let i = 0, len = this._undo_buffer.line_ids.length; i < len; i++) {
-    //         for(let j = 0; j < count; j++){
-    //             if(this._undo_buffer.line_ids[i] == this._change_buffer.line_ids[j]){
-    //                 // 恢复这一行
-    //                 this._change_buffer.replaceLineFrom(this._undo_buffer, j);
-    //             }
-    //         }
-    //     }
-    // }
+    insertLine(start: number, columns: number, charWidth: number = 1): void {
+        this._lineChars.splice(start, 0, this.newItems(" ", columns));
+        this._lineCharAttrs.splice(start, 0, this.newItems(ATTR_MODE_NONE, columns));
+        this._lineCharWidths.splice(start, 0, this.newItems(charWidth, columns));
+        this._lineCharColors.splice(start, 0, this.newItems("", columns));
+        this._lineCharBgColors.splice(start, 0, this.newItems("", columns));
 
+        this._lineIds.splice(start, 0, IdCounter.instance.next);
+        this._lineVersions.splice(start, 0, 0);
+
+    }
+
+    /**
+     * 追加一行（空行）
+     * @param columns
+     * @param charWidth
+     */
+    appendLine(columns: number, charWidth: number = 1): void {
+        this._lineChars.push(this.newItems(" ", columns));
+        this._lineCharAttrs.push(this.newItems(ATTR_MODE_NONE, columns));
+        this._lineCharWidths.push(this.newItems(charWidth, columns));
+        this._lineCharColors.push(this.newItems("", columns));
+        this._lineCharBgColors.push(this.newItems("", columns));
+
+        this._lineIds.push(IdCounter.instance.next);
+        this._lineVersions.push(0);
+
+    }
+
+    /**
+     * 替换一行（空行）
+     * @param yIndex
+     * @param columns
+     * @param charWidth
+     */
+    replaceLine(yIndex: number, columns: number, charWidth: number = 1): void {
+        this._lineChars[yIndex] = this.newItems(" ", columns);
+        this._lineCharAttrs[yIndex] = this.newItems(ATTR_MODE_NONE, columns);
+        this._lineCharWidths[yIndex] = this.newItems(charWidth, columns);
+        this._lineCharColors[yIndex] = this.newItems("", columns);
+        this._lineCharBgColors[yIndex] = this.newItems("", columns);
+
+        this._lineIds[yIndex] = IdCounter.instance.next;
+        this._lineVersions[yIndex] = 0;
+
+    }
+
+    /**
+     * 移除一行
+     * @param start
+     * @param deleteCount
+     */
+    removeLine(start: number, deleteCount: number = 1): void {
+        this._lineChars.splice(start, deleteCount);
+        this._lineCharAttrs.splice(start, deleteCount);
+        this._lineCharWidths.splice(start, deleteCount);
+        this._lineCharColors.splice(start, deleteCount);
+        this._lineCharBgColors.splice(start, deleteCount);
+
+        this._lineIds.splice(start, deleteCount);
+        this._lineVersions.splice(start, deleteCount);
+
+
+    }
+
+    /**
+     * 将行移动到保留区
+     * @param to
+     * @param start
+     * @param deleteCount
+     */
+    moveLineTo(to: Buffer, start: number, deleteCount: number): void {
+
+        to.lineChars.push(...this._lineChars.splice(start, deleteCount));
+        to.lineCharAttrs.push(...this._lineCharAttrs.splice(start, deleteCount));
+        to.lineCharWidths.push(...this._lineCharWidths.splice(start, deleteCount));
+        to.lineCharColors.push(...this._lineCharColors.splice(start, deleteCount));
+        to.lineCharBgColors.push(...this._lineCharBgColors.splice(start, deleteCount));
+
+        to.lineIds.push(...this._lineIds.splice(start, deleteCount));
+        to.lineVersions.push(...this._lineVersions.splice(start, deleteCount));
+
+    }
+
+    /**
+     * 移动所有行
+     * @param to
+     */
+    moveAllLineTo(to: Buffer) {
+        this.moveLineTo(to, 0, this._lineChars.length);
+    }
+
+    /**
+     * 复制行到指定的LineBuffer中
+     * @param from
+     * @param start 索引
+     * @param end 索引不包括end
+     */
+    copyFrom(from: Buffer, start: number, end: number): void {
+
+        this._lineChars.push(...from.lineChars.slice(start, end));
+        this._lineCharAttrs.push(...from.lineCharAttrs.slice(start, end));
+        this._lineCharWidths.push(...from.lineCharWidths.slice(start, end));
+        this._lineCharBgColors.push(...from.lineCharBgColors.slice(start, end));
+        this._lineCharColors.push(...from.lineCharColors.slice(start, end));
+
+        this._lineIds.push(...from.lineIds.slice(start, end));
+        this._lineVersions.push(...from.lineVersions.slice(start, end));
+
+    }
+
+    /**
+     * 复制某一行的某些元素到指定的lineBuffer中
+     * @param from
+     * @param yIndex
+     * @param start
+     * @param end
+     */
+    copyLineFrom(from: Buffer, yIndex: number, start: number = 0, end: number = -1) {
+        if (end == -1) {
+            end = from.lineChars[yIndex].length;
+        }
+        this._lineChars.push(from.lineChars[yIndex].slice(start, end));
+        this._lineCharAttrs.push(from.lineCharAttrs[yIndex].slice(start, end));
+        this._lineCharWidths.push(from.lineCharWidths[yIndex].slice(start, end));
+        this._lineCharBgColors.push(from.lineCharBgColors[yIndex].slice(start, end));
+        this._lineCharColors.push(from.lineCharColors[yIndex].slice(start, end));
+
+        this._lineIds.push(from.lineIds[yIndex]);
+        this._lineVersions.push(from.lineVersions[yIndex]);
+
+    }
+
+    /**
+     * 替换某一行
+     * @param from
+     * @param yIndex
+     */
+    replaceLineFrom(from: Buffer, yIndex: number) {
+        this._lineChars[yIndex] = from.lineChars[yIndex];
+        this._lineCharAttrs[yIndex] = from.lineCharAttrs[yIndex];
+        this._lineCharWidths[yIndex] = from.lineCharWidths[yIndex];
+        this._lineCharColors[yIndex] = from.lineCharColors[yIndex];
+        this._lineCharBgColors[yIndex] = from.lineCharBgColors[yIndex];
+
+        this._lineIds[yIndex] = from.lineIds[yIndex];
+        this._lineVersions[yIndex] = from.lineVersions[yIndex];
+
+    }
 
 }

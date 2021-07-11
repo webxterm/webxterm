@@ -1,790 +1,388 @@
-import {CanvasSelection, SelectionPoint, SelectionRange} from "../CanvasSelection";
+import {CanvasSelection} from "../selection/CanvasSelection";
 import {Terminal} from "../Terminal";
 import {CommonUtils} from "../common/CommonUtils";
 import {CanvasTextRenderer} from "./CanvasTextRenderer";
+import {Buffer} from "../buffer/Buffer";
+import {DataTypeValue} from "../buffer/DataTypeValue";
+import {CanvasSelectionPoint} from "../selection/CanvasSelectionPoint";
+import {CanvasSelectionSelectType} from "../selection/CanvasSelectionSelectType";
+
+
+/**
+ * 字符类型
+ */
+enum CharType {
+    NUMBER_LETTER,  // 数字 + 英文 + '-'
+    SYMBOL,         // 英文符号
+    CHINESE,        // 中文
+    CHINESE_SYMBOL, // 中文符号
+    LEFT_SYMBOL,    // 左符号，如 (
+    RIGHT_SYMBOL,   // 右符号，如 )
+    BLANK,          // 空格
+    UNKNOWN         // 其他
+}
+
+/**
+ * 单词边界状态
+ */
+enum BoundaryArrived {
+    NO,             // 没到单词边界
+    UNKNOWN,        // 未定的单词边界
+    YES             // 已到单词边界
+}
+
+/**
+ * 一对的符号
+ * (){}[]<>（）【】「」《》
+ */
+const CoupleSymbol: { [key: string]: string } = {
+    "(": ")",
+    "[": "]",
+    "{": "}",
+    "<": ">",
+    ")": "(",
+    "]": "[",
+    "}": "{",
+    ">": "<",
+
+    "（": "）",
+    "【": "】",
+    "「": "」",
+    "《": "》",
+    "）": "（",
+    "】": "【",
+    "」": "「",
+    "》": "《"
+};
+
+
+// 换行符
+const LINE_FEED = "\n";
 
 /**
  * 内容选择渲染器
  */
 export class CanvasSelectionRenderer extends CanvasTextRenderer {
 
-    // 上次选择的开始点和结束点
-    private lastAnchorPoint: SelectionPoint;
-    private lastFocusPoint: SelectionPoint;
-
-    // 是否为反选
-    private isReverseSelect: boolean = false;
+    // 选中的行的内容
+    private _selectContents: string[] = [];
 
     constructor(term: Terminal) {
         super(term);
 
-        this.lastAnchorPoint = new SelectionPoint(0, 0);
-        this.lastFocusPoint = new SelectionPoint(0, 0);
     }
 
     getView(): HTMLCanvasElement {
         return this._term.selectionView;
     }
 
-    // /**
-    //  * 清除指定行
-    //  * @param yIndex
-    //  */
-    // clearLine(yIndex: number): void {
-    //     // 空行不处理。
-    //     const rect = this._rendered_lines_rect[yIndex];
-    //     if(!rect) return;
-    //     const len = rect.length;
-    //     if(len == 0) return;
-    //
-    //     const height = this.height, startY = yIndex * height;
-    //     for(let i = 0, startX, width; i < len; i++){
-    //         [startX, width] = rect[i].split(",");
-    //         if(this.ctx) this.ctx.clearRect(parseInt(startX), startY, parseInt(width), height);
-    //     }
-    // }
-    //
-    // /**
-    //  * 清除全部
-    //  */
-    // clear(): void {
-    //     for(let y = 0, len = this._rendered_lines_rect.length; y < len; y++){
-    //         this.clearLine(y);
-    //     }
-    // }
 
+    resize(rows: number, columns: number) {
+        // 更新字体大小，并计算字符宽度
+        super.updateFontSize();
+        this.select2();
+    }
+
+    calcPoint(sel: CanvasSelection): number[]{
+        let ps = [];
+        if (sel.anchorPoint2.pageY < sel.focusPoint2.pageY
+            || (sel.anchorPoint2.pageY == sel.focusPoint2.pageY && sel.anchorPoint2.pageX <= sel.focusPoint2.pageX)) {
+            // 正向选择
+            ps[0] = this.calcStartLineX(sel.anchorPoint2.pageX);
+            ps[1] = this.calcStartLineY(sel.anchorPoint2.pageY);
+
+            ps[2] = this.calcStartLineX(sel.focusPoint2.pageX);
+            ps[3] = this.calcStartLineY(sel.focusPoint2.pageY);
+        } else {
+            // 反向选择
+            ps[0] = this.calcStartLineX(sel.focusPoint2.pageX);
+            ps[1] = this.calcStartLineY(sel.focusPoint2.pageY);
+
+            ps[2] = this.calcStartLineX(sel.anchorPoint2.pageX);
+            ps[3] = this.calcStartLineY(sel.anchorPoint2.pageY);
+        }
+        return ps;
+    }
+
+    /**
+     * 普通内容选择
+     * @param duplicate2clipboard 是否需要更新选中的内容到粘贴板中
+     * @param displayBuffer 显示缓冲区
+     */
+    select2(duplicate2clipboard: boolean = true,
+            displayBuffer: Buffer | undefined = undefined) {
+
+        const sel: CanvasSelection = this._term.selection;
+        if(!sel.running) return;
+
+        // 相同的点进来不用处理
+        if(CommonUtils.isSamePoint(sel.anchorPoint2, sel.focusPoint2)){
+            console.info("select2>isSamePoint...." + JSON.stringify(sel.anchorPoint2))
+            return;
+        }
+
+        // 描述：
+        // sel.anchorPoint = sel.anchorPoint2: 开始点
+        // sel.focusPoint = sel.focusPoint2: 结束点
+        // sel.version: 当前选择版本号
+
+        // 选择原理
+        // 通过getDisplayBuffer() 获取的Buffer，查询当前版本行的版本号是否为sel.version，
+        // 如果版本号一致的话，则说明是当前需要被选中的行。
+        // 至于从哪里开始，哪里结束，需要看sel.anchorPoint2和sel.focusPoint2这两个点。
+        // 如果sel.anchorPoint2比sel.focusPoint2大的话，说明是从下向上选择的，否则就是从上到下选择。
+        const topIndex = this._term.getOffsetTop();
+        if(displayBuffer == undefined){
+            displayBuffer = this._term.bufferSet.getDisplayBuffer(topIndex, this.active_buffer.size + topIndex);
+            // 更新显示缓冲区信息
+            this.display_buffer.removeLine(0, this.active_buffer.display_buffer.size);
+            this.display_buffer.copyFrom(displayBuffer, 0, displayBuffer.size);
+        }
+
+        // x1, y1 => 开始点
+        // x2, y2 => 结束点
+        let [x1, y1, x2, y2] = this.calcPoint(sel);
+        console.info(x1, y1, x2, y2);
+
+        // y: 当前可视化界面的行索引。
+        // docY: 当前的文档的所有行的行索引。
+        for (let y = 0, yIndex = topIndex, len = displayBuffer.size; y < len; y++, yIndex++) {
+
+            this.clearLine(y);
+
+            // 没有被选择的话，跳过
+            if (displayBuffer.lineVersions[y] != sel.version) {
+                continue;
+            }
+
+            let x = 0, end = -1;
+            if (sel.columnMode || (y1 == y2 && x1 < x2)) {
+                // 选择在同一行 || 列模式
+                x = x1;
+                end = x2;
+            } else if (yIndex == y1) {
+                // 开始行
+                x = x1;
+            } else if (yIndex == y2) {
+                // 结束行
+                end = x2;
+            }
+
+            // 渲染选中的内容
+            this.drawLine(x, y, displayBuffer, end, true);
+
+            // 是否需要更新选中的内容到粘贴板中
+            if(!duplicate2clipboard){
+                continue;
+            }
+            // 获取每一行选择的内容
+            const currentLineChars = displayBuffer.lineChars[y];
+            const selectTextArray = currentLineChars.slice(x, end);
+            let selectText = this.handleSelectedContent2(selectTextArray);
+
+            this._selectContents[yIndex] = displayBuffer.lineIds[y] > 0 ? selectText + LINE_FEED : selectText;
+        }
+
+        // 是否需要更新选中的内容到粘贴板中
+        if(!duplicate2clipboard){
+            return;
+        }
+
+        // 去掉最后一个\n
+        const finalSelectText = this._selectContents.slice(sel.startY, sel.stopY).join("");
+        sel.selectedContent = finalSelectText.substring(0, finalSelectText.length - 1);
+
+        // 选中内容
+        this._term.clipboard.value = sel.selectedContent;
+        this._term.clipboard.select();
+
+        //////////////////////////////////////////////////////////////////////////////////////////
+        /// BUG：选择后，只有当前显示区的内容会被选择，其他没有在显示区的内容并没有添加到selectedContent中。
+        //////////////////////////////////////////////////////////////////////////////////////////
+
+    }
+
+    get selectContents(): string[] {
+        return this._selectContents;
+    }
 
     /**
      * 内容选择
-     * @param selection
      */
-    select(selection: CanvasSelection) {
-        // console.info(JSON.stringify(selection));
-        if(this.ctx){
-
-            const width = this.measuredTextWidth
-                , height = this.height
-                , fullWidth = this._term.columns * width;
-
-            // console.info("fullWidth:" + fullWidth);
-            // 开始坐标(x, y)
-            // 结束坐标(x, y)
-            const anchorX = selection.anchorPoint.x
-                , anchorY = selection.anchorPoint.y
-                ,  focusX = selection.focusPoint.x
-                ,  focusY = selection.focusPoint.y;
-
-            // let anchorPoint = new SelectionPoint(anchorX, anchorY),
-            //     focusPoint = new SelectionPoint(focusX, focusY);
-
-            // 判断两个点是否相同
-            // console.info("判断两个点是否相同：" + (this.lastAnchorPoint.x == anchorX
-            //     && this.lastAnchorPoint.y == anchorY
-            //     && this.lastFocusPoint.x == focusX
-            //     && this.lastFocusPoint.y == focusY));
-            // console.info(JSON.stringify(this.lastAnchorPoint) + JSON.stringify(this.lastFocusPoint));
-            // console.info("anchorY：" + anchorY + "， anchorX：" + anchorX + "，focusX：" + focusX + "，focusY：" + focusY);
-            //
-            if(CommonUtils.isSamePoint(this.lastAnchorPoint, selection.anchorPoint)
-                && CommonUtils.isSamePoint(this.lastFocusPoint, selection.focusPoint)){
-                // 位置相同，不用处理。
-                console.info("位置相同，不用处理。");
-                return;
-            }
-            //
-
-            // 上次选择的点
-            if(CommonUtils.indexPoint(selection.anchorPoint, selection.focusPoint)){
-                // 正向选择
-                // 从上往下选择。
-                // console.info("正向选择。。。");
-                if(this.isReverseSelect){
-                    // 首先需要取消之前选中的。如果之前是反向选择的话。
-                    this.clearSelected(selection);
-                }
-                this.isReverseSelect = false;
-
-                // 临时保存selection.ranges
-                let ranges = selection.ranges;
-                selection.clearRanges();
-
-                for(let y = anchorY,
-                        x = 0,
-                        w = 0,
-                        yIndex = 0,
-                        startIndex = 0,
-                        end = -1,
-                        i = 0; y <= focusY; y+=height, i++){
-                    if(y == anchorY) {
-
-                        if(y == focusY){
-                            // 全部在一行
-                            startIndex = Math.floor(anchorX / width);
-                            end = Math.floor(focusX / width);
-                            w = focusX - anchorX;       // 考虑占两个位置的emoji表情
-                        } else {
-                            // 第一行
-                            startIndex = Math.floor(anchorX / width);
-                            end = -1;
-                            w = fullWidth - anchorX;
-                        }
-                        x = anchorX;
-                    } else if(y == focusY){
-                        // 最后一行
-                        x = 0;
-                        w = focusX;     // 考虑占两个位置的emoji表情
-                        startIndex = 0;
-                        end = Math.floor(focusX / width);
-                    } else {
-                        // 中间行
-                        x = 0;
-                        w = fullWidth;
-                        startIndex = 0;
-                        end = -1;
-                    }
-
-                    if(ranges[i]
-                        && CommonUtils.isSamePoint(ranges[i].startPoint, new SelectionPoint(x, y))
-                        && CommonUtils.isSamePoint(ranges[i].stopPoint, new SelectionPoint(w + x, y))){
-                        // console.info("第" + (i + 1) + "行不用渲染");
-                        selection.ranges[i] = ranges[i];
-                        continue;
-                    }
-
-                    // [0, this._term.rows - 1]
-                    yIndex = Math.floor(y / height);
-                    // console.info("yIndex:" + yIndex + ", startIndex:" + startIndex + ", stopIndex:" + stopIndex);
-
-                    let data_arr = this._display_buffer.lines[yIndex];
-                    if(end == -1) end = data_arr.length
-
-                    // yIndex最大值：this._term.rows - 1
-                    if(yIndex > this._term.rows - 1){
-                        // []
-                        continue;
-                    }
-
-                    let selectTextArray = data_arr.slice(startIndex, end);
-
-                    // console.info(blocks);
-                    // console.info(selectedBlocks);
-
-                    // 清除当前行
-                    // this.clearLine(yIndex + 1);
-                    // if(this.ctx){
-                    //     this.ctx.clearRect(w + x, y, fullWidth, this.height);
-                    // }
-
-                    // 如果第一行是空行的话，不用选中。
-                    let selectedContent = this.handleSelectedContent(selectTextArray);
-
-                    let textLength = selectedContent.length;
-                    if(y == anchorY && textLength == 0){
-                        selection.ranges[i] = new SelectionRange(0, 0, 0, 0, "");
-                        continue;
-                    }
-
-                    // 考虑中文占位符的问题
-                    if(textLength > 0){
-                        if(selectedContent[0] === ""){
-                            // 中文占位符
-                            selectTextArray = data_arr.slice(startIndex + 1, end);
-                            w = w - width;
-                            x = x + width;
-                        }
-                    }
-
-                    // console.info("selectedTextArray.length=" + selectedTextArray.length + ", focusX=" + (focusX / width));
-
-                    // 如果focusX大于当前行的文本的坐标值的话，当前行全选。
-                    // if(y == focusY){
-                    //     if(textLength < Math.floor((focusX / width))){
-                    //         w = fullWidth;
-                    //     }
-                    // }
-                    // this.drawSelectedText(x, y);
-
-                    this.drawLine(Math.floor(x / width)
-                        , yIndex
-                        , this._active_buffer.display_buffer
-                        , end
-                        , true);
-
-                    selection.ranges[i] = new SelectionRange(x, y, w + x, y, selectedContent.join(""));
-
-                }
-
-                // 判断哪行是多余的（被取消选中的）
-                // selection.ranges 和 ranges做对比
-                if(selection.ranges.length < ranges.length){
-                    // 取消选中的行应该是ranges.length - selection.ranges.length
-                    for(let i = selection.ranges.length, len = ranges.length; i < len; i++){
-                        if(this.ctx){
-                            this.ctx.clearRect(ranges[i].startPoint.x,
-                                ranges[i].startPoint.y, ranges[i].stopPoint.x - ranges[i].startPoint.x, this.height);
-                        }
-                    }
-                }
-
-                // console.info(selection.ranges);
-
-
-
-            } else if(CommonUtils.reverseIndexPoint(selection.anchorPoint, selection.focusPoint)){
-                // 反向选择
-                // 从下往上选择
-                if(!this.isReverseSelect){
-                    // 首先需要取消之前选中的。如果之前是正选选择的话。
-                    this.clearSelected(selection);
-                }
-
-                this.isReverseSelect = true;
-
-                // console.info("反向选择");
-                //
-                // 临时保存selection.ranges
-                let ranges = selection.ranges;
-                selection.clearRanges();
-
-                // console.info("len=" + Math.floor((anchorY - focusY) / height) + ", anchorY=" + anchorY + ", focusY=" + focusY + ", height=" + height);
-
-                // 反向遍历。
-                for(let y = 0,
-                        x = 0,
-                        w = 0,
-                        yIndex = 0,
-                        // len = Math.floor((anchorY - focusY) / height),
-                        startIndex = 0,
-                        end = 0; y <= anchorY; y += height, yIndex++){
-
-                    if(y < focusY){
-                        // console.info("y=" + y);
-                        selection.ranges[yIndex] = new SelectionRange(0, y, 0, y, "", true);
-
-                        // 清除当前行
-                        if(!ranges[yIndex] || (ranges[yIndex].startPoint.x == 0 && ranges[yIndex].stopPoint.x == 0)){
-                            // 两个点为原点。
-                            // startPointX == stopPointX
-                            continue
-                        } else {
-                            // 如果不是的话，则清掉
-                            // if(this.ctx){
-                            //     this.ctx.clearRect(0, y, fullWidth, this.height);
-                            // }
-                            this.clearLine(yIndex);
-                        }
-                        continue;
-                    }
-
-                    if(y == focusY) {
-                        if(y == anchorY){
-                            // 全部在一行
-                            startIndex = Math.floor(focusX / width);
-                            end = Math.floor(anchorX / width);
-                            w = anchorX - focusX;   // 需要渲染的宽度
-                        } else {
-                            // 第一行
-                            startIndex = Math.floor(focusX / width);
-                            end = -1;
-                            w = fullWidth - focusX; // 需要渲染的宽度
-                        }
-                        x = focusX;
-
-                        // 第一行取消选中
-                        // 如果不是的话，则清掉
-                        // if(this.ctx){
-                        //     this.ctx.clearRect(0, y, x, this.height);
-                        // }
-                        this.clearLine(yIndex);
-
-                    } else if(y == anchorY){
-                        // 最后一行
-                        x = 0;
-                        w = anchorX;    // 需要渲染的宽度
-                        startIndex = 0;
-                        end = Math.floor(anchorX / width);
-                    } else {
-                        // 中间行
-                        x = 0;
-                        w = fullWidth;  // 需要渲染的宽度
-                        startIndex = 0;
-                        end = -1;
-                    }
-
-                    // console.info("selection=" + JSON.stringify(selection));
-
-                    // 判断哪行不用重新渲染。
-                    // 从底部开始。
-                    if(ranges[yIndex]
-                        && CommonUtils.isSamePoint(ranges[yIndex].startPoint, new SelectionPoint(x, y))
-                        && CommonUtils.isSamePoint(ranges[yIndex].stopPoint, new SelectionPoint(w + x, y))){
-                        // console.info("第" + (i + 1) + "行不用渲染");
-                        selection.ranges[yIndex] = ranges[yIndex];
-                        continue;
-                    }
-
-
-                    // [0, this._term.rows - 1]
-                    // console.info("i:" + i + ", startIndex:" + startIndex + ", stopIndex:" + stopIndex);
-
-                    let data_arr = this._display_buffer.lines[yIndex];
-                    if(end == -1) end = data_arr.length;
-                    // yIndex最大值：this._term.rows - 1
-                    if(yIndex > this._term.rows - 1){
-                        // []
-                        continue;
-                    }
-
-                    let selectTextArray = data_arr.slice(startIndex, end);
-
-                    // 获取选中的内容
-                    let selectedContent = this.handleSelectedContent(selectTextArray);
-                    if(selectedContent.length > 0){
-                        if(selectedContent[0] === ""){
-                            // 中文占位符
-                            selectTextArray = data_arr.slice(startIndex - 1, end);
-
-                            w = w + width;
-                            x = x - width;
-                        }
-                    }
-
-                    // console.info("selectedBlocks:" + JSON.stringify(selectedBlocks));
-                    console.info("x:" + Math.floor(x / width));
-                    this.drawLine(Math.floor(x / width)
-                        , yIndex
-                        , this._active_buffer.display_buffer
-                        , end
-                        , true);
-
-                    selection.ranges[yIndex] = new SelectionRange(x, y, w + x, y, selectedContent.join(""));
-
-                }
-
-
-            } else {
-                // 两个点相同。
-                // console.info("两个点相同。");
-            }
-
-            selection.running = true;
-
-            this.lastAnchorPoint = selection.anchorPoint;
-            this.lastFocusPoint = selection.focusPoint;
-
-            this._term.clipboard.value = selection.selectedContent;
-            this._term.clipboard.select();
-
-            console.info("select:selectedContent:\"" + selection.selectedContent + "\"");
-
-        }
-
+    select() {
+        this.select2();
     }
 
     /**
      * 处理选中的内容，如果后面全部都是空格的话，就不用返回空格，只返回空行。
      * @param selectTextArray
      */
-    handleSelectedContent(selectTextArray: string[]){
+    handleSelectedContent(selectTextArray: string[]): string[] {
         let validIndex = -1, result = [];
-        for(let i = 0, len = selectTextArray.length; i < len; i++){
-            if(selectTextArray[i] != " "){
+        for (let i = 0, len = selectTextArray.length; i < len; i++) {
+            if (selectTextArray[i] != " ") {
                 validIndex = i;
             }
             result[i] = selectTextArray[i];
         }
-        if(validIndex == -1){
+        if (validIndex == -1) {
             return [];
         }
         return result.slice(0, validIndex + 1);
     }
 
-    // /**
-    //  * 绘制选中的文字
-    //  * @param startX
-    //  * @param startY
-    //  // * @param selectedWidth 选中区域的宽度
-    //  // * @param height 当前行的高度
-    //  // * @param charWidth 字符宽度
-    //  */
-    // drawSelectedText(startX: number
-    //     , startY: number
-    //                  // , selectedWidth: number
-    //     // , height: number
-    //     // , charWidth: number
-    // ): void{
-    //     // 渲染选中颜色。
-    //     if(this.ctx){
-    //
-    //         // 计算从第几个字符开始
-    //         let //charCount = startX / charWidth,
-    //             textStartY = startY + this.height
-    //             , yIndex = startY / this.height
-    //             , xIndex = startX / this.measuredTextWidth
-    //             , blocks_data = this._display_buffer.lines[yIndex]    // 数据
-    //             , blocks_attr = this._display_buffer.line_attrs[yIndex]   // 属性
-    //             , blocks_char_width = this._display_buffer.line_char_widths[yIndex]   //
-    //             , blocks_color = this._display_buffer.line_colors[yIndex]
-    //             , blocks_bg_color = this._display_buffer.line_bg_colors[yIndex];
-    //
-    //         // ['100,100;']
-    //         // 保存渲染信息，为了后面可以快速清除渲染的内容。
-    //         let render_start = -1   // 开始渲染的x
-    //             , render_width = 0;   // 渲染的长度
-    //         const render_info = [];
-    //
-    //         for (let x = xIndex
-    //                  , len = blocks_data.length
-    //                  , current_font_style: DrawFontStyle = DrawFontStyle.NORMAL
-    //                  , hasUnderline // 是否含有下划线
-    //                  , isInvisible  // 是否含有下划线
-    //                  , isBold = false
-    //                  , isInverse = false
-    //                  , isFaint = false
-    //                  , isItalic = false
-    //                  , isSlowBlink = false
-    //                  // , isRapidBlink = false
-    //                  // , isCrossedOut = false
-    //                  , attrMode; x <= len; x++) {
-    //
-    //
-    //             // 空块
-    //             if (!blocks_data[x] || blocks_data[x].length == 0) continue;
-    //
-    //             // let value = block.data;
-    //             // let invisible = block.isInvisible, underline = block.isUnderline;
-    //             let selectionColor;
-    //             let selectionTextColor;
-    //
-    //             if((attrMode = blocks_attr[x]) != ATTR_MODE_NONE){
-    //                 // 没有渲染的块
-    //                 // 解析样式
-    //                 // let array = DataBlockAttribute.parseClassName(CommonUtils.substring(block, 2));
-    //                 // let className = array[0];
-    //                 let color = blocks_color[x], bgColor = blocks_bg_color[x];
-    //
-    //                 if(isBold) isBold = false;
-    //                 if(isInverse) isInverse = false;
-    //                 if(isItalic) isItalic = false;
-    //                 if(isFaint) isFaint = false;
-    //                 if(isFaint) isFaint = false;
-    //                 if(hasUnderline) hasUnderline = false;
-    //                 if(isSlowBlink) isSlowBlink = false;
-    //                 // if(isRapidBlink) isRapidBlink = false;
-    //                 if(isInvisible) isInvisible = false;
-    //                 // if(isCrossedOut) isCrossedOut = false;
-    //
-    //                 // 解析attr_mode...
-    //                 switch (attrMode) {
-    //                     case ATTR_MODE_NONE:
-    //                         break;
-    //                     case ATTR_MODE_BOLD:
-    //                         isBold = true;
-    //                         break;
-    //                     case ATTR_MODE_INVERSE:
-    //                         isInverse = true;
-    //                         break;
-    //                     case ATTR_MODE_ITALIC:
-    //                         isItalic = true;
-    //                         break;
-    //                     case ATTR_MODE_FAINT:
-    //                         isFaint = true;
-    //                         break;
-    //                     case ATTR_MODE_UNDERLINE:
-    //                         hasUnderline = true;
-    //                         break;
-    //                     case ATTR_MODE_SLOW_BLINK:
-    //                         isSlowBlink = true;
-    //                         break;
-    //                     // case ATTR_MODE_RAPID_BLINK:
-    //                     //     isRapidBlink = true;
-    //                     //     break;
-    //                     case ATTR_MODE_INVISIBLE:
-    //                         isInvisible = true;
-    //                         break;
-    //                     // case ATTR_MODE_CROSSED_OUT:
-    //                     //     isCrossedOut = true;
-    //                     //     break;
-    //                     default:
-    //                         // if(attrMode > ATTR_MODE_CROSSED_OUT){
-    //                         //     attrMode -= ATTR_MODE_CROSSED_OUT;
-    //                         //     isCrossedOut = true;
-    //                         // }
-    //                         if(attrMode >= ATTR_MODE_INVISIBLE){
-    //                             attrMode -= ATTR_MODE_INVISIBLE;
-    //                             isInvisible = true;
-    //                         }
-    //                         // if(attrMode >= ATTR_MODE_RAPID_BLINK){
-    //                         //     attrMode -= ATTR_MODE_RAPID_BLINK;
-    //                         //     isRapidBlink = true;
-    //                         // }
-    //                         if(attrMode >= ATTR_MODE_SLOW_BLINK){
-    //                             attrMode -= ATTR_MODE_SLOW_BLINK;
-    //                             isSlowBlink = true;
-    //                         }
-    //                         if(attrMode >= ATTR_MODE_UNDERLINE){
-    //                             attrMode -= ATTR_MODE_UNDERLINE;
-    //                             hasUnderline = true;
-    //                         }
-    //                         if(attrMode >= ATTR_MODE_FAINT){
-    //                             attrMode -= ATTR_MODE_FAINT;
-    //                             isFaint = true;
-    //                         }
-    //                         if(attrMode >= ATTR_MODE_ITALIC){
-    //                             attrMode -= ATTR_MODE_ITALIC;
-    //                             isItalic = true;
-    //                         }
-    //                         if(attrMode >= ATTR_MODE_INVERSE){
-    //                             attrMode -= ATTR_MODE_INVERSE;
-    //                             isInverse = true;
-    //                         }
-    //                         if(attrMode >= ATTR_MODE_BOLD){
-    //                             attrMode -= ATTR_MODE_BOLD;
-    //                             isBold = true;
-    //                         }
-    //                 }
-    //                 // 解析attr_mode...end...
-    //
-    //                 // 加粗和斜体
-    //                 if(isItalic && isBold){
-    //                     current_font_style = DrawFontStyle.BOTH;
-    //                 } else {
-    //                     // 斜体
-    //                     if(isItalic){
-    //                         current_font_style = DrawFontStyle.ITALIC;
-    //                     }
-    //                     // 加粗
-    //                     if(isBold){
-    //                         current_font_style = DrawFontStyle.BOLD;
-    //                     }
-    //                 }
-    //
-    //                 if(current_font_style != DrawFontStyle.NORMAL){
-    //                     // 不是正常的字体
-    //                     this.updateFont(current_font_style);
-    //                 }
-    //
-    //                 // console.info("className:" + className + ", color:" + color + ', bgColor:' + bgColor);
-    //
-    //                 // 字体斜体，字体加粗
-    //
-    //                 // this.ctx.font = this.getFont(block.isItalic, block.isBold);
-    //
-    //                 // 绘制选中的背景颜色。
-    //                 if(this._term.preferences.selectionColor.length > 0){
-    //                     selectionColor = this._term.preferences.selectionColor;
-    //                 } else {
-    //
-    //                     if(isInverse){
-    //                         // 颜色反转
-    //                         selectionColor = this._term.preferences.backgroundColor;
-    //                     } else {
-    //
-    //                         if(!!color && this._term.preferences.paletteMap[color]){
-    //                             selectionColor = this._term.preferences.paletteMap[color];
-    //                         } else {
-    //                             // 默认颜色。
-    //                             selectionColor = this._term.preferences.color;
-    //                         }
-    //
-    //                     }
-    //
-    //
-    //                 }
-    //
-    //                 // 设置选中的颜色。
-    //                 this.ctx.fillStyle = selectionColor;
-    //                 this.ctx.fillRect(startX, startY, this.measuredTextWidth * blocks_char_width[x], this.height);
-    //
-    //                 // 绘制选中的文本颜色。
-    //                 if(this._term.preferences.selectionTextColor.length > 0){
-    //                     selectionTextColor = this._term.preferences.selectionTextColor;
-    //                 } else {
-    //                     if(isInverse){
-    //                         // 颜色反转
-    //                         selectionTextColor = this._term.preferences.color;
-    //                     } else {
-    //                         selectionTextColor = (!!bgColor && this._term.preferences.paletteMap[bgColor]) ?
-    //                             this._term.preferences.paletteMap[bgColor]: this._term.preferences.backgroundColor;
-    //                     }
-    //
-    //
-    //                 }
-    //
-    //                 this.ctx.fillStyle = selectionTextColor;
-    //
-    //             } else {
-    //                 // 设置默认的字体。
-    //                 // 设置默认的字体。
-    //                 this.updateFont(DrawFontStyle.NORMAL);
-    //
-    //                 selectionColor = this._term.preferences.selectionColor.length > 0 ? this._term.preferences.selectionColor: this._term.preferences.color;
-    //                 selectionTextColor = this._term.preferences.selectionTextColor.length > 0 ? this._term.preferences.selectionTextColor : this._term.preferences.backgroundColor;
-    //
-    //                 this.ctx.fillStyle = selectionColor;
-    //                 this.ctx.fillRect(startX, startY, this.measuredTextWidth * blocks_char_width[x], this.height);
-    //                 this.ctx.fillStyle = selectionTextColor;
-    //
-    //             }
-    //
-    //             // 画下划线，高度为2个像素
-    //             // 制表符
-    //             // if(value === "\t"){
-    //             //     const tabSize = this._term.preferences.tabSize;
-    //             //     let spCount = tabSize - (charCount % tabSize);
-    //             //
-    //             //     for(let i = 0; i < spCount; i++){
-    //             //         // 空格不输出，只右移。以减少fillText的调用次数
-    //             //         this.ctx.fillStyle = selectionColor;
-    //             //         this.ctx.fillRect(startX, startY, charWidth, this.height);
-    //             //         startX += charWidth;
-    //             //         charCount += 1;
-    //             //     }
-    //             //
-    //             //     continue;
-    //             // }
-    //
-    //             // 空格不输出，只右移。以减少fillText的调用次数
-    //             if(!isInvisible && blocks_data[x] != " "){
-    //                 // 保存渲染的信息，为了后期可以快速清除。
-    //                 if(render_start == -1) render_start = startX;
-    //                 render_width += this.measuredTextWidth * blocks_char_width[x];
-    //
-    //                 this.ctx.fillText(blocks_data[x], startX, textStartY);
-    //             } else {
-    //                 if(render_start >= 0 && render_width != 0){
-    //                     render_info.push(render_start + "," + render_width);
-    //                     // 空格或隐藏的文本。
-    //                     render_start = -1;
-    //                     render_width = 0;
-    //                 }
-    //             }
-    //
-    //             startX += this.measuredTextWidth * blocks_char_width[x];
-    //             // charCount += blocks_char_width[x];
-    //
-    //             // drawCursor
-    //             // if(this.activeBuffer.x == x + 1 && this.activeBuffer.y == y + 1){
-    //             //     console.info("绘制光标..");
-    //             //     this.drawCursor(false, selectionColor, selectionTextColor);
-    //             // }
-    //
-    //         }
-    //
-    //         if(render_start >= 0 && render_width != 0){
-    //             render_info.push(render_start + "," + render_width);
-    //             // 空格或隐藏的文本。
-    //         }
-    //         this._rendered_lines_rect[yIndex] = render_info;
-    //         // return startX;
-    //
-    //     }
-    //
-    //     // return startX + selectedWidth;
-    //
-    // }
-
-    /**
-     * 仅清除画布
-     * @param selection
-     */
-    clearRect(selection: CanvasSelection){
-        // if(this.ctx) {
-        //     if(/*selection.ranges.length == 0 || */selection.selectAll){
-        //         this.ctx.clearRect(0,
-        //             0, this._term.selectionView.width, this._term.selectionView.height);
-        //         return;
-        //     } else {
-        //         for(let range of selection.ranges){
-        //             // 获取所有选中的范围。
-        //             // this.ctx.clearRect()
-        //             // this.ctx.clearRect(range.startPoint.x,
-        //             //     range.startPoint.y, range.realStopX - range.startPoint.x, this.height);
-        //         }
-        //     }
-        // }
-        this.clear();
+    handleSelectedContent2(selectTextArray: string[]): string {
+        return this.handleSelectedContent(selectTextArray).join("");
     }
 
     /**
      * 取消选择。
      */
-    clearSelected(selection: CanvasSelection){
+    cancel() {
 
-        if(!selection.running) return;
+        const selection = this._term.selection;
 
-        if(this.ctx){
+        if (!selection.running) return;
 
-            console.info(selection);
+        if (this.ctx) {
+
             // 清除画布
-            this.clearRect(selection);
+            this.clear();
 
-            selection.clearRanges();
-            selection.running = false;
+            selection.reset();
 
             // 取消选中、
             let sel = window.getSelection();
-            if(sel){
+            if (sel) {
                 sel.removeAllRanges();
             }
+
+            //
             this._term.clipboard.value = "";
+            this._selectContents = [];
         }
+    }
+
+    /**
+     * 全选
+     */
+    selectAll() {
+
+        this.select2();
+
+        this._term.selection.running = true;
+        this._term.selection.selectAll = true;
     }
 
 
     /**
-     * 处理块选择
-     * @param index
-     * @param blocks
-     * @param flag
+     * 处理窗口缩放，滚动时候的选中内容。
+     * @param displayBuffer 显示缓冲区
      */
-    private static handleSelectBlock(index: number, blocks: string[], flag: number): number{
+    renderVideo(displayBuffer: Buffer): number {
 
-        let chr = blocks[index];
-        if(flag == 1) {
-            if(CommonUtils.isNumberLetter(chr)) {
-                return index;
-            } else {
-                return -1;
-            }
-        } else if(flag == 2) {
-            if(CommonUtils.isSymbol(chr)) {
-                return index;
-            } else {
-                return -1;
-            }
-        } else if(flag == 3) {
-            if(CommonUtils.isChinese(chr)
-                || (chr == "" && CommonUtils.isChinese(blocks[index - 1]))) {
-                // 中文或下一个是中文的占位号
-                return index;
-            } else {
-                return -1;
-            }
-        } else if(flag == 4) {
-            if(CommonUtils.isChineseSymbol(chr)
-                || (chr == "" && CommonUtils.isChineseSymbol(blocks[index - 1]))) {
-                // 中文或下一个是中文的占位号
-                return index;
-            } else {
-                return -1;
-            }
-        } else if(flag == 10){
-            // 左边的字符需要对应右边的字符
-            if(/[)}\]>）】」》]/gi.test(chr)){
-                return index;
-            } else {
-                return -1;
-            }
-        } else if(flag == 11){
-            // 右边的字符需要对应左边的字符。
-            if(/[({\[<（【「《]/gi.test(chr)){
-                return index;
-            } else {
-                return -1;
-            }
+        // 什么都没有选中
+        if (!this._term.selection.running) {
+            return 0;
         }
-        return -1;
+
+        // 全选。
+        this.select2(false, displayBuffer);
+
+        if (this._term.selection.selectAll) {
+            // 全选的时候，不用渲染内容。
+            return 1;
+        } else {
+            // 部分选中
+            return 2;
+        }
+    }
+
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // 双击块选择功能
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * 比较数据类型 是否达到了单词边界
+     * @param index 索引
+     * @param chars 数据
+     * @param selected 选择的字符
+     * @param ct 数据类型
+     */
+    compareCharType(index: number, chars: string[], selected: string, ct: CharType): BoundaryArrived {
+        let c = chars[index], lc = chars[index - 1];
+        switch (ct) {
+            case CharType.LEFT_SYMBOL:
+                // 左边的字符需要对应右边的字符
+                // ({\[<（【「《
+                // return CoupleSymbol[c] == selected ? BoundaryArrived.YES : BoundaryArrived.NO;
+            case CharType.RIGHT_SYMBOL:
+                // 右边的字符需要对应左边的字符。
+                return CoupleSymbol[c] == selected ? BoundaryArrived.YES: BoundaryArrived.NO;
+
+            case CharType.NUMBER_LETTER:
+                if (CommonUtils.isNumberLetter(c)) {
+                    return BoundaryArrived.NO;
+                }
+                break;
+            case CharType.SYMBOL:
+                if (CommonUtils.isSymbol(c)) {
+                    return BoundaryArrived.NO;
+                }
+                break;
+            case CharType.CHINESE:
+                if (CommonUtils.isChinese(c) || (CommonUtils.isChinese(lc) && c == DataTypeValue.SECONDARY)) {
+                    // 中文或下一个是中文的占位号
+                    return BoundaryArrived.NO;
+                }
+                break;
+            case CharType.CHINESE_SYMBOL:
+                if (CommonUtils.isChineseSymbol(c) || (CommonUtils.isChineseSymbol(lc) && c == DataTypeValue.SECONDARY)) {
+                    // 中文符号或下一个是中文符号的占位号
+                    return BoundaryArrived.NO;
+                }
+                break;
+
+            case CharType.BLANK:
+                // 空格
+                if (CommonUtils.isBlank(c)) {
+                    return BoundaryArrived.NO;
+                }
+                break;
+        }
+        return BoundaryArrived.YES;
+    }
+
+    /**
+     * 判断字符是属于那些类型的字符
+     * @param c 字符
+     * @private
+     */
+    getCharType(c: string): CharType {
+        if (CommonUtils.isLeftSymbol(c)) {
+            // 整对的特殊字符(左): (){}[]<>（）【】「」《》
+            return CharType.LEFT_SYMBOL;
+        } else if (CommonUtils.isRightSymbol(c)) {
+            // 整对的特殊字符(右): (){}[]<>（）【】「」《》
+            return CharType.RIGHT_SYMBOL;
+        } else if (CommonUtils.isNumberLetter(c)) {
+            // 数字 + 字母
+            return CharType.NUMBER_LETTER;
+        } else if (CommonUtils.isSymbol(c)) {
+            // 符号
+            return CharType.SYMBOL;
+        } else if (CommonUtils.isChinese(c)) {
+            // 中文
+            return CharType.CHINESE;
+        } else if (CommonUtils.isChineseSymbol(c)) {
+            // 中文符号
+            return CharType.CHINESE_SYMBOL;
+        } else if (CommonUtils.isBlank(c)) {
+            // 空格
+            return CharType.BLANK;
+        }
+        return CharType.UNKNOWN;
     }
 
     /**
@@ -792,466 +390,408 @@ export class CanvasSelectionRenderer extends CanvasTextRenderer {
      * 1，字母的话，选中前后的字母。
      * 2，特殊字符的话，选中前后的特殊字符
      * 3，中文的话，选中前后的中文
-     * @param selection
      */
-    selectBlock(selection: CanvasSelection) {
-
-        if(this.ctx){
-
-            const width = this.measuredTextWidth
-                , height = this.height
-                // selection.anchorPoint.y = index * height，需要索引的话，需要除height
-                , startYIndex = Math.floor(selection.anchorPoint.y / height)
-                , blocks = this._display_buffer.lines[startYIndex];
-
-            let startXIndex = Math.floor(selection.anchorPoint.x / width);
-            let selectedChar = blocks[startXIndex];
-
-            if(selectedChar == ""){
-                // 内存存储结构：["a", "b", "c", "中", "", "文", ""]
-                // 计算到当前是中文占位符
-                // 获取上一个中文
-                startXIndex -= 1;
-                selectedChar = blocks[startXIndex];
-            }
-
-            let flag = 0;
-            if(CommonUtils.isNumberLetter(selectedChar)) {
-                // 数字 + 字母
-                flag = 1;
-            } else if(/[({\[<（【「《]/gi.test(selectedChar)){
-                // 整对的特殊字符(左): (){}[]<>（）【】「」《》
-                flag = 10;
-            } else if(/[)}\]>）】」》]/gi.test(selectedChar)){
-                // 整对的特殊字符(右): (){}[]<>（）【】「」《》
-                flag = 11;
-            } else if(CommonUtils.isSymbol(selectedChar)){
-                // 符号
-                flag = 2;
-            } else if(CommonUtils.isChinese(selectedChar)){
-                // 中文
-                flag = 3;
-            } else if(CommonUtils.isChineseSymbol(selectedChar)){
-                // 中文符号
-                flag = 4;
-            }
-
-            // 左边搜索
-            let leftIndex = startXIndex;
-            if(flag != 10){
-                // 如果是特殊字符，左边的符号
-                let ret_index = leftIndex;
-                for(let i = startXIndex - 1; 0 <= i; i--){
-                    ret_index = CanvasSelectionRenderer.handleSelectBlock(i, blocks, flag);
-                    if(flag == 11){
-                        // 右边特殊字符，如)、>、}等。
-                        if(ret_index == -1) continue;
-                        break;
-                    }
-                    if(ret_index == -1) break;
-                    leftIndex = ret_index;
-                }
-                // 处理特殊字符
-                if(ret_index != -1) leftIndex = ret_index;
-            }
-
-            // 右边搜索
-            let rightIndex = startXIndex;
-            if(flag != 11){
-                let ret_index = rightIndex;
-                for(let i = startXIndex + 1, len = blocks.length; i < len; i++){
-                    ret_index = CanvasSelectionRenderer.handleSelectBlock(i, blocks, flag);
-                    if(flag == 10){
-                        // 左边特殊字符，如(、<、{等。
-                        if(ret_index == -1) continue;
-                        break;
-                    }
-                    if(ret_index == -1) break;
-                    rightIndex = ret_index;
-                }
-                // 处理特殊字符
-                if(ret_index != -1) rightIndex = ret_index;
-            }
-
-            console.info("leftIndex:" + leftIndex + ", rightIndex:" + rightIndex);
-
-            const selectedContent = blocks.slice(leftIndex, rightIndex + 1);
-            const x = leftIndex * width
-                , y = startYIndex * height
-                , w = (rightIndex - leftIndex + 1) * width;
-
-            console.info("x:" + x + ", y:" + y + ", w:" + w + ", height:" + height);
-
-            // 绘制选中的颜色
-            selection.clearRanges();
-            // 正常的，stopX = x + w, 但是如果出现中文等字符的话，一个中文 = width * 2;
-            this.drawLine(leftIndex
-                , startYIndex
-                , this._active_buffer.display_buffer
-                , rightIndex + 1
-                , true);
-
-            selection.running = true;
-
-            // 解析选中的文本
-            let selectedText = this.handleSelectedContent(selectedContent).join("");
-            selection.ranges.push(new SelectionRange(x, y, x + w, y, selectedText));
-
-            this._term.clipboard.value = selection.selectedContent;
-            this._term.clipboard.select();
-
-            console.info("selectedContent:" + selection.selectedContent);
-
-            console.info(JSON.stringify(selection));
-
-            // 更新selection
-            // 考虑后面会滚动，滚动调用select方法渲染
-            selection.start(x, y, this._term.getOffsetTop());
-            selection.stop(x + w, y);
-
-            console.info(JSON.stringify(selection));
-
-            // 22019aaaa-aaa
-
-        }
-
-    }
-
-
-    /**
-     * 选中一整行，三击
-     * @param selection
-     */
-    selectLine(selection: CanvasSelection){
-
-        if(this.ctx){
-
-            const height = this.height
-                , width = this.measuredTextWidth
-                , fullWidth = this._term.columns * width
-                // selection.anchorPoint.y = index * height，需要索引的话，需要除height
-                , startY = selection.anchorPoint.y
-                , startYIndex = Math.floor(startY / height)
-                , selectedContent = this._display_buffer.lines[startYIndex];
-
-            // 绘制选中的颜色
-            selection.clearRanges();
-            this.drawLine(0
-                , startYIndex
-                , this._active_buffer.display_buffer
-                , -1
-                , true);
-
-            selection.running = true;
-            // 解析选中的文本
-            const selectedText = this.handleSelectedContent(selectedContent).join("");
-            selection.ranges.push(new SelectionRange(0, startY, fullWidth, startY, selectedText));
-
-            // 更新selection
-            // 考虑后面会滚动，滚动调用select方法渲染
-            selection.start(0, startY, this._term.getOffsetTop());
-            selection.stop(fullWidth, startY);
-
-            this._term.clipboard.value = selection.selectedContent;
-            this._term.clipboard.select();
-
-            console.info("selectedContent:" + selection.selectedContent);
-
-        }
-    }
-
-    /**
-     * 全选
-     * @param selection
-     */
-    selectAll(selection: CanvasSelection) {
-
-        if(this.ctx){
-
-            const width = this.measuredTextWidth
-                , height = this.height
-                , fullWidth = this._term.columns * width
-                , saved_lines = this._saved_buffer.lines;
-
-            const lineCount = saved_lines.length + this._active_buffer.size;
-
-            if(lineCount != selection.ranges.length){
-                // 选中其他区域，需要清掉
-                selection.clearRanges();
-
-                // 这块是滚动区保存的行。
-                for(const blocks of saved_lines){
-                    if(!blocks) continue;
-                    // 解析选中的文本
-                    const selectedText = this.handleSelectedContent(blocks).join("");
-                    selection.ranges.push(new SelectionRange(0, 0, 0, 0, selectedText));
-                }
-
-                // 这块是缓冲区的行
-                for(const blocks of this._change_buffer.lines){
-                    if(!blocks) continue;
-                    // 解析选中的文本
-                    const selectedText = this.handleSelectedContent(blocks).join("");
-                    selection.ranges.push(new SelectionRange(0, 0, 0, 0, selectedText));
-                }
-            }
-
-            this.clearRect(selection);
-
-            // 渲染显示内容
-            for(let y = 0, len = this._active_buffer.size; y < len; y++){
-                this.drawLine(0
-                    , y
-                    , this._active_buffer.display_buffer
-                    , -1
-                    , true);
-            }
-
-            selection.running = true;
-            selection.selectAll = true;
-
-            this._term.clipboard.value = selection.selectedContent;
-            this._term.clipboard.select();
-        }
-
-
-    }
-
-
-    /**
-     * 处理窗口缩放，滚动时候的选中内容。
-     */
-    handleSelect(): number{
-
-        // 什么都没有选中
-        if(!this._term.selection.running){
-            return 0;
-        }
-
-        // 全选。
-        // 全选的时候，不用渲染内容。
-        if(this._term.selection.selectAll){
-            this.selectAll(this._term.selection);
-            return 1;
-        } else {
-            // 部分选中
-            // this.select2(this._term.selection);
-            return 2;
-        }
-    }
-
-
-    select2(selection: CanvasSelection){
-        if(!selection.running) return;
-
-        // 清除原来的。
-        // 清除画布
-        this.clearRect(selection);
-
-        console.info("select2():_csr:" + JSON.stringify(this._csr) + ', last_csr:' + JSON.stringify(this._last_csr));
-        console.info("select2:selection: " + JSON.stringify(selection));
-
-        // 当前显示的区域没有选中的文本。
-        // 坐标点
-        // 选中区域
-        // 如 anchorY = 10, focusY = 11
-        // minY = 10, maxY = 11
-        // selection.offsetTop = 10
-        const minY = Math.min(selection.anchorPoint.y, selection.focusPoint.y)
-            , maxY = Math.max(selection.anchorPoint.y, selection.focusPoint.y);
-
-        // if(minY == 0 && maxY == 0 && selection.anchorPoint.x == 0 && selection.focusPoint.x == 0) {
-        //     console.info("Selection没有选中文本");
-        //     return;
-        // }
-
-        // 最小行号，最大行号，从1开始
-        // minY & maxY = 行号 * height
-        const minLineNum = minY / this.height + selection.offsetTop + 1
-            , maxLineNum = maxY / this.height + selection.offsetTop + 1;
-
-        // 当前显示的行的开始的行号，从1开始
-        const topLineNum = this._csr.top, bottomLineNum = this._csr.bottom;
-
-        console.info("top:" + topLineNum);
-
-        // 选择文本在显示区域下面 || 选择文本在显示区域上面
-        // 这两种情况都不用处理。
-        if(minLineNum < topLineNum && maxLineNum > bottomLineNum){
-            console.info("select: 选中的文本不在显示区域。")
+    selectBlock() {
+        if (!this.ctx) {
             return;
         }
 
-        // 判断当前的displayLines中是否存在选中区域、
-        // selection anchorPoint Y绝对值
-        // displayRange Y绝对值
+        // 选择原理
+        // 通过在显示区中双击选中某一个字符，块选择的功能就是把 对应的字符串，直到遇到分隔符，才结束
+        // 那么如果一整行都没有分割符的话，需要向上行/向下行查找分隔符。
+        // 如果在显示区一直没有找到分隔符的，就一直向上/向下，直到将所有行查找。
+        const sel = this._term.selection;
 
-        let startY: number, stopY: number;
-        if(topLineNum < minLineNum) {
-            startY = minLineNum;
-            stopY = bottomLineNum < maxLineNum ? bottomLineNum : maxLineNum;
-        } else {
-            startY = topLineNum;
-            stopY = bottomLineNum < maxLineNum ? bottomLineNum : maxLineNum;
+        const topIndex = this._term.getOffsetTop();
+        const displayBuffer = this._term.bufferSet.getDisplayBuffer(topIndex, this.active_buffer.size + topIndex);
+
+        // 考虑到精度问题
+        const yIndex = Math.floor(sel.anchorPoint2.y / this.height);
+        const lineChars = displayBuffer.lineChars[yIndex];
+        let xIndex = Math.floor(sel.anchorPoint2.x / this.measuredTextWidth);
+        // 获取到选中的值
+        let selected = lineChars[xIndex];
+        // 选中的字符是空字符串
+        if(selected == DataTypeValue.SECONDARY){
+            // 中文占位符
+            xIndex -= 1;
+            selected = lineChars[xIndex];
         }
 
-        // startY: 从0开始
-        // stopY: 从0开始
-        startY -= topLineNum;
-        stopY -= topLineNum;
+        // 向上查找，获取最终的边界点。
+        const anchorPoint = this.findPrev(xIndex, yIndex, displayBuffer, selected, topIndex);
 
-        const width = this.measuredTextWidth
-            , fullWidth = this._term.columns * width
-            , height = this.height
-            , anchorY = startY * height
-            , focusY = stopY * height;
+        // 向下查找
+        const focusPoint = this.findNext(xIndex + 1, yIndex, displayBuffer, selected, topIndex);
 
-        let startX = 0, stopX = 0;
-        if(CommonUtils.indexPoint(selection.anchorPoint, selection.focusPoint)){
-            // startX第一行从selection.anchorPoint.x开始
-            // 其他行从0开始。
-            if(topLineNum <= minLineNum) {
-                startX = selection.anchorPoint.x;
-            }
-            // 最后一行为0
-            // 其他行为selection.focusPoint.x
-            if(bottomLineNum < maxLineNum){
-                stopX = fullWidth;
-            } else {
-                stopX = selection.focusPoint.x;
-            }
-        } else if(CommonUtils.reverseIndexPoint(selection.anchorPoint, selection.focusPoint)){
-            if(topLineNum <= minLineNum) {
-                startX = selection.focusPoint.x;
-            }
-            // 最后一行为0
-            // 其他行为selection.focusPoint.x
-            if(bottomLineNum < maxLineNum){
-                stopX = fullWidth;
-            } else {
-                stopX = selection.anchorPoint.x;
-            }
+        // 重新设置选择定位点
+        sel.start(anchorPoint.x, anchorPoint.y, anchorPoint.offsetTop);
+        sel.stop(focusPoint.x, focusPoint.y, focusPoint.offsetTop);
+
+        // 使用默认选择功能
+        this._term.emitSelect(CanvasSelectionSelectType.NORMAL);
+
+    }
+
+    /**
+     * 向上查找 直到有硬换行，如果没有硬换行的，一直查找到保留区才结束。
+     * 原理：
+     * 每一行的lineId < 0 代表软换行。正数代表硬换行。
+     * @param xIndex 当前选中行的结束分析x坐标
+     * @param yIndex
+     * @param displayBuffer
+     * @param selected 字符
+     * @param topIndex 离顶部的距离
+     * @return CanvasSelectionPoint
+     */
+    private findPrev(xIndex: number,
+                   yIndex: number,
+                   displayBuffer: Buffer,
+                   selected: string,
+                   topIndex: number): CanvasSelectionPoint {
+
+        const offsetTop = this._term.measureOffsetTop2(topIndex);
+
+        // 获取选中字符的数据类型
+        const charType = this.getCharType(selected);
+        if(charType == CharType.LEFT_SYMBOL){
+            // 如果遇到对应符号且为左边的符号，如(<《等，则左边不用处理。
+            return new CanvasSelectionPoint(xIndex * this.measuredTextWidth, yIndex * this.height, offsetTop);
         }
 
-        const anchorX = startX, focusX = stopX;
+        // 上一行的索引。
+        let prevIndex = yIndex,
+            // 是否需要向上循环查找
+            loop = true;
 
-        // 临时保存selection.ranges
-        let ranges = selection.ranges;
-        selection.clearRanges();
+        // 是否为词汇边界，0：代表不是词汇边界，1: 代表行的第一个字符，2：代表边界字符
+        let boundary = BoundaryArrived.NO,
+            // x坐标
+            index = xIndex;
 
-        for(let y = anchorY,
-                x = 0,
-                w = 0,
-                yIndex = 0,
-                startIndex = 0,
-                stopIndex = -1,
-                i = 0; y <= focusY; y+=height, i++){
-            if(y == anchorY) {
+        while (loop) {
 
-                if(y == focusY){
-                    // 全部在一行
-                    startIndex = Math.floor(anchorX / width);
-                    stopIndex = Math.floor(focusX / width);
-                    w = focusX - anchorX;       // 考虑占两个位置的emoji表情
-                } else {
-                    // 第一行
-                    startIndex = Math.floor(anchorX / width);
-                    stopIndex = -1;
-                    w = fullWidth - anchorX;
+            // 判断是否符合字符条件
+            // selected
+            // 判断当前行是否为词汇边界。
+            let chars = displayBuffer.lineChars[prevIndex];
+            for(let i = index; -1 < i; i--){
+                // 从右边开始查找
+                boundary = this.compareCharType(i, chars, selected, charType);
+                if(boundary == BoundaryArrived.YES){
+                    // 结束向上查找
+                    // 如果是右边的符号的，需要包含选中。
+                    index = i + (charType == CharType.RIGHT_SYMBOL ? 0 : 1);
+                    break;
                 }
-                x = anchorX;
-            } else if(y == focusY){
-                // 最后一行
-                x = 0;
-                w = focusX;     // 考虑占两个位置的emoji表情
-                startIndex = 0;
-                stopIndex = Math.floor(focusX / width);
-            } else {
-                // 中间行
-                x = 0;
-                w = fullWidth;
-                startIndex = 0;
-                stopIndex = -1;
+                if(i == 0){
+                    // 如果到了第一个字符还不知道是否为单词边界的话，先更换了另一个状态，因为有可能上一个是软换行。
+                    boundary = BoundaryArrived.UNKNOWN;
+                    index = i;
+                }
+            }
+            // 遇到单词边界，结束。
+            if(boundary == BoundaryArrived.YES){
+                break;
             }
 
-            // if(ranges[i]
-            //     && CommonUtils.isSamePoint(ranges[i].startPoint, new SelectionPoint(x, y))
-            //     && CommonUtils.isSamePoint(ranges[i].stopPoint, new SelectionPoint(w + x, y))){
-            //     // console.info("第" + (i + 1) + "行不用渲染");
-            //     selection.ranges[i] = ranges[i];
-            //     continue;
-            // }
+            // 超出了显示缓冲区了，需要继续向上查找。直到保留区的第一行。
+            if (prevIndex == 0) {
+                // 外层循环挂起。。。。
+                console.info("外层循环挂起。。。。");
 
-            // [0, this._term.rows - 1]
-            yIndex = Math.floor(y / height);
-            // console.info("yIndex:" + yIndex + ", startIndex:" + startIndex + ", stopIndex:" + stopIndex);
+                // 假如当前在备用备用缓冲区，是不可能会查找到默认缓冲区的。备用缓冲区和默认缓冲区会出现断行的情况，无需考虑。
+                // 假如当前在默认缓冲区，如果没有断行的情况，需要一直向上查找，直到保留区的第一行。
+                let topIndex2: number = topIndex;
+                // 获取上一个的显示区。
+                let end = topIndex2;
+                topIndex2 = end - this.active_buffer.size;
 
-            let data_arr = this._active_buffer.display_buffer.lines[yIndex];
-            // yIndex最大值：this._term.rows - 1
-            if(yIndex > this._term.rows - 1){
-                // []
-                continue;
+                // 显示区的最后一行的y坐标
+                let y;
+                if(topIndex2 < 0){
+                    topIndex2 = 0;
+                    y = end - 1;
+                } else {
+                    y = this.active_buffer.size - 1;
+                }
+
+                // 获取上一个显示缓冲区
+                let db = this._term.bufferSet.getDisplayBuffer(topIndex2, end);
+                let x = db.lineChars[y].length - 1;
+
+                // 从右下角开始选择。
+                return this.findPrev(x, y, db, selected, topIndex2);
             }
 
-            let selectedTextArray;
-            if(stopIndex == -1){
-                selectedTextArray = data_arr.slice(startIndex, data_arr.length);
-            } else {
-                selectedTextArray = data_arr.slice(startIndex, stopIndex);
+            // 是否需要向上一行查找
+            // 上一行为正数的话，代表上一行已断行。
+            // 负数的话，代表上一行是软换行。
+            if(!(loop = displayBuffer.lineIds[prevIndex - 1] < 0)) {
+                // 行id > 0，说明已经断行、
+                if(boundary == BoundaryArrived.UNKNOWN){
+                    if(charType == CharType.RIGHT_SYMBOL){
+                        // 选中的是右符号
+                        // 如果没有匹配到左符号的话，就选中符号本身。
+                        // 重置
+                        index = xIndex;
+                        prevIndex = yIndex;
+                    } else {
+                        boundary = BoundaryArrived.YES;
+                    }
+                }
+                break;
+            }
+            prevIndex -= 1;
+            index = chars.length - 1;
+        }
+
+        return new CanvasSelectionPoint(index * this.measuredTextWidth, prevIndex * this.height, offsetTop);
+    }
+
+
+    /**
+     * 向下查找（包含当前行）直到有硬换行，如果没有硬换行的，一直查找到缓冲区尾部区才结束。
+     * 原理：
+     * 每一行的lineId < 0 代表软换行。正数代表硬换行。
+     * @param xIndex 当前行的开始分析x坐标
+     * @param yIndex
+     * @param displayBuffer
+     * @param selected 字符
+     * @param topIndex 离顶部的距离
+     * @return CanvasSelectionPoint
+     */
+    private findNext(xIndex: number,
+                     yIndex: number,
+                     displayBuffer: Buffer,
+                     selected: string,
+                     topIndex: number): CanvasSelectionPoint {
+
+        const offsetTop = this._term.measureOffsetTop2(topIndex);
+
+        // 字符类型
+        const charType = this.getCharType(selected);
+        if(charType == CharType.RIGHT_SYMBOL){
+            // 如果遇到对应符号且为右边的符号，如)>》等，则右边不用处理。
+            return new CanvasSelectionPoint(xIndex * this.measuredTextWidth, yIndex * this.height, offsetTop);
+        }
+
+        // 循环查找，直到结束
+        let loop = true, nextIndex = yIndex, index = xIndex;
+
+        // 是否为词汇边界，0：代表不是词汇边界，1: 代表行的第一个字符，2：代表边界字符
+        let boundary = BoundaryArrived.NO;
+
+        while (loop){
+
+            // 获取单词边界
+            const chars = displayBuffer.lineChars[nextIndex];
+            for(let i = index, len = chars.length; i < len; i++){
+                // 是否为单词边界
+                boundary = this.compareCharType(i, chars, selected, charType);
+                if(boundary == BoundaryArrived.YES){
+                    // 结束向下查找
+                    // 如果是左边的符号的，需要包含选中。
+                    index = i + (charType == CharType.LEFT_SYMBOL ? 1 : 0);
+                    loop = false;
+                    break;
+                }
+                if(i == len - 1){
+                    // 如果到了最后一个字符还不知道是否为单词边界的话，先更换了另一个状态，因为有可能下一个是软换行。
+                    boundary = BoundaryArrived.UNKNOWN;
+                    index = i;
+                }
+            }
+            // 遇到单词边界，结束。
+            if(boundary == BoundaryArrived.YES){
+                break;
             }
 
-            // console.info(blocks);
-            // console.info(selectedBlocks);
+            // 是否需要向下一行查找
+            // 下一行为正数的话，代表下一行已断行。
+            // 负数的话，代表上一行是软换行。
 
-            // 清除当前行
-            // this.clearLine(yIndex + 1);
-            // if(this.selectionViewContext){
-            //     this.selectionViewContext.clearRect(w + x, y, fullWidth, this.height);
-            // }
+            if(!(loop = displayBuffer.lineIds[nextIndex] < 0)) {
+                // 当前行是正数，说明不用继续查找下一行
+                if(boundary == BoundaryArrived.UNKNOWN){
+                    boundary = BoundaryArrived.YES;
+                }
+                break;
+            }
+            // 继续下一行查找。
+            nextIndex += 1;
+            // 下一行从0开始。
+            index = 0;
 
-            // 如果第一行是空行的话，不用选中。
-            let selectedContent = this.handleSelectedContent(selectedTextArray);
-            // let textLength = selectedTextArray.length;
-            // if(y == anchorY && textLength == 0){
-            //     selection.ranges[i] = new SelectionRange(0, 0, 0, 0, "", 0);
-            //     continue;
-            // }
+            if(nextIndex >= this.active_buffer.size){
+                // 到了最后一行了。
+                // 进入外部循环挂起
 
+                let topIndex2: number = topIndex + this.active_buffer.size;
+                // 获取下一个的显示区。
+                let end = topIndex2 + this.active_buffer.size;
 
-            // console.info("selectedTextArray.length=" + selectedTextArray.length + ", focusX=" + (focusX / width));
+                // 所有缓冲区的行数
+                let bottom = this.saved_buffer.size + this._term.bufferSet.normal.size;
+                if(this._term.bufferSet.isAlt){
+                    bottom += this._term.bufferSet.alt.size;
+                }
 
-            // 如果focusX大于当前行的文本的坐标值的话，当前行全选。
-            // if(y == focusY){
-            //     if(textLength < Math.floor((focusX / width))){
-            //         w = fullWidth;
-            //     }
-            // }
-            // this.drawSelectedText(x, y, height, width);
+                // 显示区的最后一行的y坐标
+                if(end >= bottom){
+                    end = bottom;
+                }
 
-            this.drawLine(Math.floor(x / width)
-                , y
-                , this._active_buffer.display_buffer
-                , Math.floor((w + x) / width)
-                , true);
+                // 获取上一个显示缓冲区
+                let db = this._term.bufferSet.getDisplayBuffer(topIndex2, end);
 
-            selection.ranges[i] = new SelectionRange(x, y, w + x, y, selectedContent.join(""));
+                // 从左上角开始选择
+                return this.findNext(0, 0, db, selected, topIndex2);
+
+            }
+        }
+        return new CanvasSelectionPoint(index * this.measuredTextWidth, nextIndex * this.height, offsetTop);
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // 三击行选择功能
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * 选中一整行，三击
+     */
+    selectLine() {
+
+        // 更新选择点
+        // 一直从当前行向上、向下查找，直到lineId > 0
+        if (!this.ctx) {
+            return;
+        }
+
+        // 选择原理
+        // 通过在显示区中双击选中某一个字符，块选择的功能就是把 对应的字符串，直到遇到分隔符，才结束
+        // 那么如果一整行都没有分割符的话，需要向上行/向下行查找分隔符。
+        // 如果在显示区一直没有找到分隔符的，就一直向上/向下，直到将所有行查找。
+        const sel = this._term.selection;
+
+        const topIndex = this._term.getOffsetTop();
+        const displayBuffer = this._term.bufferSet.getDisplayBuffer(topIndex, this.active_buffer.size + topIndex);
+
+        // 选择行
+        // 考虑到精度问题
+        const yIndex = Math.floor(sel.anchorPoint2.y / this.height);
+        // 当前选择行
+
+        // 向上查找，获取最终的边界点。
+        const anchorPoint = this.findUp(yIndex, displayBuffer, topIndex);
+
+        // 向下查找
+        const focusPoint = this.findDown(yIndex, displayBuffer, topIndex);
+
+        // 重新设置选择定位点
+        sel.start(anchorPoint.x, anchorPoint.y, anchorPoint.offsetTop);
+        sel.stop(focusPoint.x, focusPoint.y, focusPoint.offsetTop);
+
+        // 使用默认选择功能
+        this._term.emitSelect(CanvasSelectionSelectType.NORMAL);
+
+    }
+
+    /**
+     * 向上查找行，直到上一行为lineId > 0才结束
+     * @param yIndex
+     * @param displayBuffer
+     * @param topIndex
+     * @private
+     */
+    private findUp(yIndex: number, displayBuffer: Buffer, topIndex: number): CanvasSelectionPoint {
+        const offsetTop = this._term.measureOffsetTop2(topIndex);
+        let upIndex = yIndex;
+        let loop = true;
+        while(loop) {
+            if(upIndex == 0){
+                let topIndex2: number = topIndex;
+                let end = topIndex;
+                topIndex2 = end - this.active_buffer.size;
+
+                // 显示区的最后一行的y坐标
+                let y;
+                if(topIndex2 < 0){
+                    topIndex2 = 0;
+                    y = end - 1;
+                } else {
+                    y = this.active_buffer.size - 1;
+                }
+
+                // 获取上一个显示缓冲区
+                let db = this._term.bufferSet.getDisplayBuffer(topIndex2, end);
+
+                return this.findUp(y, db, topIndex2);
+            }
+
+            if(!(loop = displayBuffer.lineIds[upIndex - 1] < 0)){
+                // 结束软换行
+                break;
+            }
+            upIndex -= 1;
+        }
+
+        return new CanvasSelectionPoint(0, upIndex * this.height, offsetTop);
+    }
+
+    /**
+     * 向下查找行，直到当前行为lineId > 0才结束
+     * @param yIndex
+     * @param displayBuffer
+     * @param topIndex
+     * @private
+     */
+    private findDown(yIndex: number, displayBuffer: Buffer, topIndex: number): CanvasSelectionPoint {
+        const offsetTop = this._term.measureOffsetTop2(topIndex);
+        let downIndex = yIndex;
+        let loop = true;
+        while (loop) {
+
+            if(downIndex >= this.active_buffer.size){
+                // 到了最后一行了。
+                // 进入外部循环挂起
+
+                let topIndex2: number = topIndex + this.active_buffer.size;
+                // 获取下一个的显示区。
+                let end = topIndex2 + this.active_buffer.size;
+
+                // 所有缓冲区的行数
+                let bottom = this.saved_buffer.size + this._term.bufferSet.normal.size;
+                if(this._term.bufferSet.isAlt){
+                    bottom += this._term.bufferSet.alt.size;
+                }
+
+                // 显示区的最后一行的y坐标
+                if(end >= bottom){
+                    end = bottom;
+                }
+
+                // 获取上一个显示缓冲区
+                let db = this._term.bufferSet.getDisplayBuffer(topIndex2, end);
+
+                // 从左上角开始选择
+                return this.findDown(0, db, topIndex2);
+
+            }
+
+            // 当前行如果lineId>0的话，代表存在硬换行。
+            if(!(loop = displayBuffer.lineIds[downIndex] < 0)){
+                // 结束软换行
+                // 包含当前行被选择
+                downIndex += 1;
+                break;
+            }
+
+            downIndex += 1;
 
         }
 
-        // 判断哪行是多余的（被取消选中的）
-        // selection.ranges 和 ranges做对比
-        // if(selection.ranges.length < ranges.length){
-        //     // 取消选中的行应该是ranges.length - selection.ranges.length
-        //     for(let i = selection.ranges.length, len = ranges.length; i < len; i++){
-        //         if(this.selectionViewContext){
-        //             this.selectionViewContext.clearRect(ranges[i].startPoint.x,
-        //                 ranges[i].startPoint.y, ranges[i].stopPoint.x - ranges[i].startPoint.x, this.height);
-        //         }
-        //     }
-        // }
-
-
-
+        return new CanvasSelectionPoint(0, downIndex * this.height, offsetTop);
     }
 
 }

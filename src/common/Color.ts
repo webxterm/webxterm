@@ -1,7 +1,7 @@
 export class Color {
 
     // 系统内置颜色
-    private static systemPresetColors: {[key: string] : string} = {
+    private static systemPresetColors: { [key: string]: string } = {
         'black': '#000000',
         'navy': '#000080',
         'darkblue': '#00008b',
@@ -153,9 +153,9 @@ export class Color {
      */
     static parseColor(color: string, alpha: number | string = 0.99) {
 
-        if(1 === 1) return color;
+        if (1 === 1) return color;
 
-        if(color.indexOf("rgba") !== -1) return color;
+        if (color.indexOf("rgba") !== -1) return color;
 
         alpha = alpha || 'ff';
 
@@ -166,7 +166,7 @@ export class Color {
         } else {
 
             let c = Color.systemPresetColors[color.toLowerCase()];
-            if(!c){
+            if (!c) {
                 // 无效的颜色
                 console.info('无效的颜色值: ' + color + ', 已自动设置为#000000(Black)。');
                 c = '#000000';
@@ -177,7 +177,7 @@ export class Color {
 
         }
 
-        let r:string = 'ff', g:string = 'ff', b:string = 'ff', a:string, len:number = color.length,
+        let r: string = 'ff', g: string = 'ff', b: string = 'ff', a: string, len: number = color.length,
             a1: number = 255;
 
         if (len === 3) {

@@ -9,7 +9,7 @@ export class Transceiver {
 
     private _socket: WebSocket | undefined;
 
-    private _version: {[key: string] : string} | undefined;
+    private _version: { [key: string]: string } | undefined;
 
     readonly terminal: Terminal;
 
@@ -58,7 +58,7 @@ export class Transceiver {
             this._socket.onmessage = (e) => {
                 const message: string = e.data;
 
-                if(this.enableHeartbeat){
+                if (this.enableHeartbeat) {
                     // 停止心跳
                     this.stopHeartbeat();
                 }
@@ -67,14 +67,14 @@ export class Transceiver {
                     // 有可能数据和下一个chunk合并返回的情况
                     const endIndex = message.indexOf("}") + 1;
                     this._version = JSON.parse(message.substring(message.indexOf("{"), endIndex));
-                    if(message.length - 1 !== endIndex){
+                    if (message.length - 1 !== endIndex) {
                         this.terminal.pushMessage(message.substring(endIndex));
                     }
                 } else {
                     this.terminal.pushMessage(message);
                 }
 
-                if(this.enableHeartbeat){
+                if (this.enableHeartbeat) {
                     // 启动心跳
                     this.startHeartbeat();
                 }
@@ -87,7 +87,7 @@ export class Transceiver {
      * @param data
      */
     public send(data: string): void {
-        if (this._socket) {
+        if (this._socket && this._socket.OPEN) {
             this._socket.send(data)
         }
     }
@@ -117,7 +117,7 @@ export class Transceiver {
      */
     private stopHeartbeat() {
 
-        if(this.heartbeatId){
+        if (this.heartbeatId) {
             clearInterval(this.heartbeatId);
             this.heartbeatId = 0;
         }
@@ -127,11 +127,11 @@ export class Transceiver {
     /**
      * 开始心跳
      */
-    private startHeartbeat(){
+    private startHeartbeat() {
 
         this.heartbeatId = setInterval(() => {
 
-            if(this._socket){
+            if (this._socket) {
                 // PM Pt ST
                 // PM => ESC ^
                 // ST => ESC \

@@ -1,9 +1,8 @@
 import {RenderType, Terminal} from "../Terminal";
-// import {BufferLine} from "../buffer/BufferLine";
-import {Buffer} from "../buffer/Buffer";
-import {BufferSet} from "../buffer/BufferSet";
-import {DataBlockAttribute} from "../buffer/DataBlockAttribute";
-import {LineBuffer} from "../buffer/LineBuffer";
+import {BufferPool} from "../buffer/BufferPool";
+import {BufferPoolSet} from "../buffer/BufferPoolSet";
+import {CommonUtils} from "../common/CommonUtils";
+import {DataTypeValue} from "../buffer/DataTypeValue";
 
 // http://www.inwap.com/pdp10/ansicode.txt
 // https://vt100.net/docs/vt102-ug/table5-13.html
@@ -21,7 +20,7 @@ import {LineBuffer} from "../buffer/LineBuffer";
 // const [TAB_COMPLETION_LENGTH, TAB_COMPLETION_CHAR] = [8, "&nbsp;"];
 
 const State = {
-    NORMAL: 0, ESC: 1, CSI: 2, OSC: 3, CHARSET: 4, DCS: 5, IGNORE: 6, PM: 7, APC:8
+    NORMAL: 0, ESC: 1, CSI: 2, OSC: 3, CHARSET: 4, DCS: 5, IGNORE: 6, PM: 7, APC: 8
 };
 
 // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
@@ -186,38 +185,35 @@ export class Parser {
         this.promptSize = terminal.prompt.length;
     }
 
-    get x(){
+    get x() {
         return this.activeBuffer.x;
     }
 
-    set x(value: number){
-        if(value < 1){
+    // 设置当前缓冲区的x值坐标
+    set x(value: number) {
+        if (value < 1) {
             value = 1;
         }
 
         this.activeBuffer.x = value;
     }
 
-    get y(){
+    get y() {
         return this.activeBuffer.y;
     }
 
-    set y(value: number){
-        if(value > this.terminal.rows){
+    // 设置当前缓冲区的y值坐标
+    set y(value: number) {
+        if (value > this.terminal.rows) {
             value = this.terminal.rows;
-        } else if(value < 1){
+        } else if (value < 1) {
             value = 1;
         }
 
         this.activeBuffer.y = value;
-
-
-
-        // if(!this.activeBuffer.isDirty(value))
-        //     this.activeBuffer.updateDirty(value, true);
     }
 
-    get bufferSet(): BufferSet {
+    get bufferSet(): BufferPoolSet {
         return this.terminal.bufferSet;
     }
 
@@ -241,11 +237,7 @@ export class Parser {
         return this.terminal.viewport;
     }
 
-    // get activeBufferLine(): HTMLElement {
-    //     return this.activeBuffer.activeBufferLine;
-    // }
-
-    get activeBuffer(): Buffer {
+    get activeBuffer(): BufferPool {
         return this.bufferSet.activeBuffer;
     }
 
@@ -253,57 +245,14 @@ export class Parser {
      * 切换到备用缓冲区、并清除内容
      */
     activateAltBuffer() {
-
-        // 需要将默认缓冲区的内容输出
-        const len = this.activeBuffer.size;
-        for (let y = 1; y <= len; y++) {
-            if(this.terminal.renderType == RenderType.HTML) {
-                // this.printer.printLine(this.activeBuffer.get(y), this.activeBuffer.getBlocks(y), false);
-            } else if(this.terminal.renderType == RenderType.CANVAS){
-                // 将默认缓冲区的内容移动到保留区中。
-                // const items = this.bufferSet.activeBuffer.slice(0, this.bufferSet.activeBuffer.y);
-                // this.bufferSet.normal.cachedLines.push(...items);
-            }
-        }
-
         this.bufferSet.activateAltBuffer();
-
-        this.terminal.addBufferFillRows();
     }
 
     /**
      * 切换到默认缓冲区
      */
     activateNormalBuffer() {
-
-        // 删除备用缓冲区的内容
-        // const lines = this.bufferSet.activeBuffer.lines;
-        // for(let i = 0, len = lines.length; i < len; i++){
-        //     lines[i].remove();
-        // }
-
-        // if(this.terminal.renderType == RenderType.CANVAS){
-        //     // 删除保留区的行、
-        //     const len = this.bufferSet.normal.cachedLines.length;
-        //     const y = this.bufferSet.normal.y;
-        //     this.bufferSet.normal.cachedLines.splice(len - y, y);
-        // }
-
         this.bufferSet.activateNormalBuffer();
-
-        // ==> 为了解决内容没有充满缓冲区的时候，切换切换到备用缓冲区的时候，会有一段的空白。
-
-        // 将没有使用过的行添加到viewport的尾部
-        // 由于切换到备用缓冲区的时候，被删掉。
-        // See: this.bufferSet.activateAltBuffer()
-       // let fragment = document.createDocumentFragment();
-       // for(let y = 1; y <= this.activeBuffer.size; y++){
-       //     let line = this.activeBuffer.get(y);
-       //     if(line && !line.used){
-       //         fragment.appendChild(line.element);
-       //     }
-       // }
-       // this.viewport.appendChild(fragment);
     }
 
     /**
@@ -348,7 +297,7 @@ export class Parser {
                             break;
                         case C0.BS:
                             // Backspace (BS  is Ctrl-H).
-                            if(this.x > (this.promptSize + 1)){
+                            if (this.x > (this.promptSize + 1)) {
                                 this.x--;
                             } else {
                                 this.terminal.bell();
@@ -363,7 +312,7 @@ export class Parser {
                             // Return Terminal Status (ENQ  is Ctrl-E).
                             break;
                         case C0.FF:
-                            // Form Feed or New Page (NP ).  (FF  is Ctrl-L). FF  is treated the same as LF .
+                        // Form Feed or New Page (NP ).  (FF  is Ctrl-L). FF  is treated the same as LF .
                         case C0.LF:
                             // Line Feed or New Line (NL).  (LF  is Ctrl-J).
                             // 换行或创建新行
@@ -382,7 +331,7 @@ export class Parser {
                             // Horizontal Tab (HTS  is Ctrl-I).
                             // https://en.wikipedia.org/wiki/Tab_key#Tab_characters
                             // 制表符
-                            if(this.terminal.renderType == RenderType.CANVAS){
+                            if (this.terminal.renderType == RenderType.CANVAS) {
                                 // \t是补全当前字符串长度到8的整数倍,最少1个最多8个空格
                                 this.tab();
                             }
@@ -398,28 +347,32 @@ export class Parser {
 
                             // 考虑性能问题
                             // 考虑先处理ascii码表
-                            {
-                                const asciiStandardCode: number | undefined = s.codePointAt(0);
-                                if(asciiStandardCode && 32 <= asciiStandardCode && asciiStandardCode < 127){
-                                    if(s.codePointAt(1) == undefined){
-                                        // 考虑emoji
-                                        this.update(s);
-                                        break;
-                                    }
+                            const cp: number | undefined = s.codePointAt(0);
+                            if (cp && 32 <= cp && cp < 127) {
+                                if (s.codePointAt(1) == undefined) {
+                                    // 考虑emoji
+                                    this.update(s);
+                                    break;
                                 }
                             }
 
                             // 判断是否为emoji表情
-                            const result = this.handleEmoji(i, s, text);
-                            if(result != -1){
-                                i = result;
-                                break;
+                            if(cp && this.terminal.emojiParser.isEmoji(cp)){
+                                console.info("emoji表情：" + s);
+                                const [index, charWidth, data] = this.terminal.emojiParser.parse(text, i);
+                                console.info(index, charWidth, data);
+                                if(index != i){
+                                    i = index;
+                                    this.update(data, charWidth);
+                                    break;
+                                }
                             }
 
                             // 判断是否为中文、双字节?
-                            if (!this.handleDoubleChars(s)) {
-                                this.update(s);
-                            }
+                            // See:
+                            // https://blog.csdn.net/qq_22520587/article/details/62454354
+                            this.update(s, CommonUtils.isChinese2(s) ? 2 : 1);
+
                             break;
                     }
                     break;
@@ -854,7 +807,7 @@ export class Parser {
                             case 3:
                                 // 心跳
                                 heartBeatValue = this.params[1];
-                                if(this.terminal.eventMap["heartbeat"])
+                                if (this.terminal.eventMap["heartbeat"])
                                     this.terminal.eventMap["heartbeat"](heartBeatValue);
                         }
 
@@ -892,7 +845,7 @@ export class Parser {
         }
 
         // 心跳不处理。
-        if(!!heartBeatValue && strings == '\x1b^3;'+heartBeatValue+'\x1b\\'){
+        if (!!heartBeatValue && strings == '\x1b^3;' + heartBeatValue + '\x1b\\') {
             return;
         }
 
@@ -900,376 +853,42 @@ export class Parser {
         // if(!this.activeBuffer.isDirty(this.y))
         //     this.activeBuffer.updateDirty(this.y, true);
         //
-        if(this.terminal.textRenderer){
+        if (this.terminal.textRenderer) {
             this.terminal.textRenderer.flushLines(this.activeBuffer.change_buffer, false);
         }
 
-        console.info("Parser:x" + this.x);
-
         this.terminal.scrollToBottomOnInput();
 
-        if(callback){
+        if (callback) {
             callback(len, this);
         }
 
     }
 
     /**
-     * emoji表情解析
-     * @param codePoint
-     * @param array
-     */
-    pushAuxCodePoint(codePoint: number, array: number[]): number[] {
-        if (!codePoint) return array;
-        if (!(codePoint >= 0xDC00 && codePoint <= 0xDFFF)) {
-            array.push(codePoint);
-        }
-        return array;
-    }
-
-    /**
-     * emoji表情解析
-     * @param s
-     * @param array
-     */
-    pushStr(s: string, array: number[]) {
-        const codePoint0 = s.codePointAt(0),
-            codePoint1 = s.codePointAt(1);
-        array.push(codePoint0 || 0);
-        return this.pushAuxCodePoint(codePoint1 || 0, array);
-    }
-
-    /**
-     * 输出emoji表情
-     * @param dataArray
-     * @param isJoining
-     */
-    outputEmoji(dataArray: number[], isJoining: boolean = false){
-        this.update(String.fromCodePoint(...dataArray));
-    }
-
-    /**
-     * 解析Emoji表情
-     * @param start
-     * @param s
-     * @param text
-     */
-    handleEmoji(start: number, s: string, text: string[]): number {
-        let i = start;
-        const codePoint0 = s.codePointAt(0) || 0;
-        const codePoint1 = s.codePointAt(1) || 0;
-        const nextCodePoint0 = text[i + 1] ? (text[i + 1].codePointAt(0) || 0) : 0;
-        const array: number[] = [];
-        // https://en.wikipedia.org/wiki/Miscellaneous_Symbols_and_Pictographs#Skin_tones
-        // Emoji variation sequences
-        if (nextCodePoint0 === 0xFE0E) {
-            // vs-15
-            // 格式：符号+FE0E
-            i++;
-            array.push(codePoint0, nextCodePoint0);
-            this.outputEmoji(array);
-            return i;
-        } else if (nextCodePoint0 === 0xFE0F) {
-            // vs-16 - emoji
-            i++;
-            array.push(codePoint0);
-            // 第二个码点不是 undefined
-            // 辅助平面字符
-            // let H = Math.floor((codePoint0 - 0x10000) / 0x400) + 0xD800,
-            //     L = (codePoint0 - 0x10000) % 0x400 + 0xDC00;
-            // 实际上 String.fromCodePoint(codePoint0) = String.fromCodePoint(H, L)
-            this.pushAuxCodePoint(codePoint1, array);
-            array.push(nextCodePoint0);
-
-            const codePoint = text[i + 1] ? text[i + 1].codePointAt(0) : 0;
-            if (codePoint === 0x20E3) {
-                // 键帽符号, 格式 #*(0-9)+FE0F+20E3
-                i++;
-                array.push(codePoint);
-                this.outputEmoji(array);
-                // console.info("键帽符号：" + String.fromCodePoint(...array));
-            } else if (codePoint === 0x200D) {
-                // zwj情况10. 符号+FE0F+200D+符号+FE0F
-                // zwj情况11. 符号+FE0F+200D+符号
-                // 下一个符号
-                array.push(codePoint);
-                i++;
-                if (text[i + 1]) {
-                    // 符合zwj情况11
-                    this.pushStr(text[i + 1], array);
-                    i++;
-                }
-                if (text[i + 1] && text[i + 1].codePointAt(0) === 0xFE0F) {
-                    // 符合zwj情况10
-                    this.pushStr(text[i + 1], array);
-                    // output(String.fromCodePoint(...array), false, false, false, true);
-                    this.outputEmoji(array, true);
-                    // console.info("符合情况10：" + String.fromCodePoint(...array));
-                    i++;
-                } else {
-                    // 符合zwj情况11
-                    this.outputEmoji(array, true);
-                    // console.info("符合情况11：" + array);
-                }
-
-            } else {
-                // 情况3：格式：符号+FE0F
-                this.outputEmoji(array);
-                // console.info("VS16:" + array);
-            }
-            return i;
-        } else if (0x1F3FB <= nextCodePoint0 && nextCodePoint0 <= 0x1F3FF) {
-            // emoji
-            // https://en.wikipedia.org/wiki/Miscellaneous_Symbols_and_Pictographs#Skin_tones
-            // U+1F3FB EMOJI MODIFIER FITZPATRICK TYPE-1-2
-            // U+1F3FC EMOJI MODIFIER FITZPATRICK TYPE-3
-            // U+1F3FD EMOJI MODIFIER FITZPATRICK TYPE-4
-            // U+1F3FE EMOJI MODIFIER FITZPATRICK TYPE-5
-            // U+1F3FF EMOJI MODIFIER FITZPATRICK TYPE-6
-            // 肤色(U+1F3FB–U+1F3FF): 🏻 🏼 🏽 🏾 🏿
-            // 格式：人物+肤色(U+1F3FB–U+1F3FF)
-            array.push(codePoint0);
-            // 第二个码点不是 undefined
-            // 辅助平面字符
-            // let H = Math.floor((codePoint0 - 0x10000) / 0x400) + 0xD800,
-            //     L = (codePoint0 - 0x10000) % 0x400 + 0xDC00;
-            // 实际上 String.fromCodePoint(codePoint0) = String.fromCodePoint(H, L)
-            this.pushAuxCodePoint(codePoint1, array);
-            // 肤色
-            array.push(nextCodePoint0);
-            i++;
-
-            // zwj情况7. 符号+肤色+200D+符号
-            if (text[i + 1] && text[i + 1].codePointAt(0) === 0x200D) {
-                // 获取下一个字符
-                array.push(0x200D);
-                i++;
-                if (text[i + 1]) {
-                    this.pushStr(text[i + 1], array);
-                    i++;
-                }
-
-                if (text[i + 1]) {
-                    const codePoint0 = text[i + 1].codePointAt(0) || 0;
-                    if (codePoint0 === 0x200D) {
-                        // zwj情况6. 符号+肤色+200D+符号+200D+符号+肤色
-                        array.push(codePoint0);
-                        i++;
-                        if (text[i + 1] && text[i + 2]) {
-                            // 人物
-                            // 肤色
-                            const next3CodePoint0 = text[i + 2].codePointAt(0) || 0;
-                            if (0x1F3FB <= next3CodePoint0 && next3CodePoint0 <= 0x1F3FF) {
-                                this.pushStr(text[i + 1], array);
-                                i++;
-                                array.push(next3CodePoint0);
-                                i++;
-                                this.outputEmoji(array, true);
-                                // console.info("zwj情况6：" + array);
-                            }
-                        }
-                    } else if (codePoint0 === 0xFE0F) {
-                        // zwj情况9. 符号+肤色+200D+符号+FE0F
-                        array.push(codePoint0);
-                        i++;
-                        this.outputEmoji(array, true);
-                        // console.info("zwj情况9：" + array);
-                    } else {
-                        // zwj情况7. 符号+肤色+200D+符号
-                        this.outputEmoji(array, true);
-                        // console.info("zwj情况7：" + array);
-                    }
-
-                } else {
-                    // zwj情况7. 符号+肤色+200D+符号
-                    this.outputEmoji(array, true);
-                    // console.info("zwj情况7：" + array);
-                }
-                return i;
-            }
-
-            this.outputEmoji(array, true);
-            // console.info("肤色：" + array);
-            i++;
-            return i;
-        } else if (nextCodePoint0 === 0x200D) {
-            // https://en.wikipedia.org/wiki/Zero-width_joiner
-            // https://emojipedia.org/emoji-zwj-sequence/
-            // http://www.unicode.org/emoji/charts/emoji-zwj-sequences.html
-            // https://unicode.org/Public/emoji/13.0/emoji-zwj-sequences.txt
-            // zwj情况3. 符号+200D+符号
-            array.push(codePoint0);
-            this.pushAuxCodePoint(codePoint1, array);
-            array.push(nextCodePoint0);
-            i++;
-            if (text[i + 1]) {
-                this.pushStr(text[i + 1], array);
-                i++;
-            }
-
-            // zwj情况8. 符号+200D+符号+FE0F
-            // zwj情况1. 符号+200D+符号+FE0F+200D+符号
-            // zwj情况2. 符号+200D+符号+FE0F+200D+符号+200D+符号
-            // zwj情况4. 符号+200D+符号+200D+符号
-            // zwj情况5. 符号+200D+符号+200D+符号+200D+符号
-            if (text[i + 1]) {
-                const codePoint0 = text[i + 1].codePointAt(0);
-                if (codePoint0 === 0x200D) {
-                    array.push(codePoint0);
-                    // zwj情况4. 符号+200D+符号+200D+符号
-                    // zwj情况5. 符号+200D+符号+200D+符号+200D+符号
-                    i++;
-                    if (text[i + 1]) {
-                        this.pushStr(text[i + 1], array);
-                        i++;
-                        // zwj情况5. 符号+200D+符号+200D+符号+200D+符号
-                        if (text[i + 1]) {
-                            const next3CodePoint0 = text[i + 1].codePointAt(0);
-                            if (next3CodePoint0 === 0x200D) {
-                                array.push(next3CodePoint0);
-                                i++;
-                                if (text[i + 1]) {
-                                    this.pushStr(text[i + 1], array);
-                                    i++;
-                                    this.outputEmoji(array, true);
-                                    // console.info("zwj情况5：" + array);
-                                }
-                            } else {
-                                // 非最后一个字符
-                                this.outputEmoji(array, true);
-                                // console.info("zwj情况4：" + array);
-                            }
-                        } else {
-                            // 最后一个字符
-                            this.outputEmoji(array, true);
-                            // console.info("zwj情况4：" + array);
-                        }
-                    }
-                } else if (codePoint0 === 0xFE0F) {
-                    array.push(codePoint0);
-                    i++;
-                    // zwj情况8. 符号+200D+符号+FE0F
-                    // zwj情况1. 符号+200D+符号+FE0F+200D+符号
-                    // zwj情况2. 符号+200D+符号+FE0F+200D+符号+200D+符号
-                    if (text[i + 1]) {
-                        const next2CodePoint0 = text[i + 1].codePointAt(0);
-                        if (next2CodePoint0 === 0x200D) {
-                            array.push(next2CodePoint0);
-                            i++;
-                            // zwj情况1. 符号+200D+符号+FE0F+200D+符号
-                            // zwj情况2. 符号+200D+符号+FE0F+200D+符号+200D+符号
-                            if (text[i + 1]) {
-                                this.pushStr(text[i + 1], array);
-                                i++;
-                                // zwj情况2. 符号+200D+符号+FE0F+200D+符号+200D+符号
-                                if (text[i + 1]) {
-                                    const next4CodePoint0 = text[i + 1].codePointAt(0);
-                                    if (next4CodePoint0 === 0x200D) {
-                                        array.push(next4CodePoint0);
-                                        i++;
-                                        if (text[i + 1]) {
-                                            this.pushStr(text[i + 1], array);
-                                            // console.info("zwj情况2：" + array);
-                                            i++;
-                                            this.outputEmoji(array, true);
-                                        }
-                                    } else {
-                                        // 非最后一个字符
-                                        this.outputEmoji(array, true);
-                                        // console.info("zwj情况1：" + array);
-                                    }
-                                } else {
-                                    // 最后一个字符
-                                    this.outputEmoji(array, true);
-                                    // console.info("zwj情况1：" + array);
-                                }
-                            }
-                        }  else {
-                            // zwj情况8. 符号+200D+符号+FE0F
-                            this.outputEmoji(array, true);
-                            // console.info("zwj情况1：" + array);
-                        }
-                    } else {
-                        // zwj情况8. 符号+200D+符号+FE0F
-                        this.outputEmoji(array, true);
-                        // console.info("zwj情况8:" + array);
-                    }
-                } else {
-                    // 非最后一个字符
-                    this.outputEmoji(array, true);
-                    // console.info("zwj情况3：" + array);
-                }
-
-            } else {
-                // 最后一个字符
-                this.outputEmoji(array, true);
-                // console.info("zwj情况3：" + array);
-            }
-            return i;
-        } else if (nextCodePoint0 >= 0x1F1E6 && nextCodePoint0 <= 0x1F1FF) {
-            if (codePoint0 >= 0x1F1E6 && codePoint0 <= 0x1F1FF) {
-                // 区域指示符号(国旗)
-                // https://en.wikipedia.org/wiki/Regional_Indicator_Symbol
-                array.push(codePoint0);
-                this.pushAuxCodePoint(codePoint1 || 0, array);
-                array.push(nextCodePoint0);
-                const nextCodePoint1 = text[i + 1] ? (text[i + 1].codePointAt(1) || 0) : 0;
-                this.pushAuxCodePoint(nextCodePoint1 || 0, array);
-                this.outputEmoji(array);
-                i++;
-            }
-            return i;
-        }
-
-        // ES5,
-        // 只要落在0xD800到0xDBFF的区间，就要连同后面2个字节一起读取。
-        // See: https://www.jianshu.com/p/88cf0f773396
-        // if (codePoint0 >= 0xD800 && codePoint0 <= 0xDBFF) {
-        //     // 基本平面字符
-        //     console.info("基本平面字符：" + String.fromCodePoint(codePoint0));
-        //     continue;
-        // }
-
-        // 第二个码点是在辅助平面
-        if (codePoint1 >= 0xDC00 && codePoint1 <= 0xDFFF) {
-            // 辅助平面字符
-            // let H = Math.floor((codePoint0 - 0x10000) / 0x400) + 0xD800,
-            //     L = (codePoint0 - 0x10000) % 0x400 + 0xDC00;
-            console.info("辅助平面字符：" + String.fromCodePoint(codePoint0));
-            this.outputEmoji([codePoint0]);
-            return i;
-        }
-
-        // 其他字符
-        return -1;
-    }
-
-    /**
-     * 处理双字节字符，如中文
+     * 更新缓冲区的内容
      * @param chr
+     * @param charWidth
      */
-    handleDoubleChars(chr: string) {
+    private update(chr: string, charWidth: number = 1) {
 
-        // See:
-        // https://blog.csdn.net/qq_22520587/article/details/62454354
-        if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(chr)) {
-            // 双字节字符
-            // 超过字数自动换行
-            if (this.x > this.activeBuffer.columns) {
-                this.nextLine(true);
-                this.x = 1;
-            }
-
-            // 添加数据
-            // 占用两个位置
-            this.activeBuffer.replace(this.y - 1, this.x - 1, 2, this.terminal.esParser.attribute, chr);
-            this.activeBuffer.replace(this.y - 1, this.x, 0, this.terminal.esParser.attribute, "");
-
-            this.x += 2;
-
-            return true;
+        // 超过字数自动换行
+        if (this.x > this.activeBuffer.columns) {
+            this.nextLine(true);
+            this.x = 1;
         }
-        return false;
+
+        this.activeBuffer.replace(this.y - 1, this.x - 1, charWidth, this.terminal.esParser.attribute, chr);
+
+        if(charWidth > 1){
+            this.activeBuffer.replace(this.y - 1, this.x, 0, this.terminal.esParser.attribute, DataTypeValue.SECONDARY);
+        }
+
+        if(charWidth > 2){
+            this.activeBuffer.replace(this.y - 1, this.x + 1, 0, this.terminal.esParser.attribute, DataTypeValue.SECONDARY);
+        }
+
+        this.x += charWidth;
 
     }
 
@@ -1277,12 +896,12 @@ export class Parser {
      * 制表符(\t)
      * 规则：\t是补全当前字符串长度到8的整数倍,最少1个最多8个空格
      */
-    private tab(){
+    private tab() {
         // 需要补多少个空格
         const tabSize = this.terminal.preferences.tabSize;
         let spCount = tabSize - ((this.x - 1) % tabSize);
-        for(let i = 0; i < spCount; i++){
-            this.update(" ");
+        for (let i = 0; i < spCount; i++) {
+            this.update(DataTypeValue.BLANK);
         }
     }
 
@@ -1292,14 +911,14 @@ export class Parser {
      * 1，如果超出滚动区域的底部的话，则滚动一行
      * 2，如果没有超出滚动区域的话，并且如果行不存在的话，添加一行
      */
-    private index(){
+    private index() {
 
         if (++this.y > this.activeBuffer.scrollBottom) {
             this.y = this.activeBuffer.scrollBottom;
             // 如果在底部
             this.scrollUp();
         } else {
-            if(!this.bufferSet.activeBuffer.change_buffer.lines[this.y]){
+            if (!this.bufferSet.activeBuffer.change_buffer.lineChars[this.y]) {
                 this.newLine();
             }
         }
@@ -1310,7 +929,7 @@ export class Parser {
      * 反向索引
      * this.y -= 1
      */
-    private reverseIndex(){
+    private reverseIndex() {
 
         if (this.y <= this.activeBuffer.scrollTop) {
             // 如果是在顶行...
@@ -1324,15 +943,17 @@ export class Parser {
      * 下一行
      * 如果行存在的话，则直接换行，否则创建新行。
      */
-    private nextLine(isSoftWrap: boolean = false){
+    private nextLine(isSoftWrap: boolean = false) {
 
-        if(isSoftWrap)
+        if (isSoftWrap){
+            this.activeBuffer.change_buffer.update2SoftLine(this.y - 1);
             console.info("isSoftWrap:" + isSoftWrap);
+        }
 
         // 滚筒上卷一行
-        this.activeBuffer.change_buffer.line_soft_wraps[this.y - 1] = isSoftWrap? 1 : 0;
+        // this.activeBuffer.change_buffer.line_ids[this.y - 1] = isSoftWrap ? 1 : 0;
 
-        if(this.y === this.activeBuffer.scrollBottom){
+        if (this.y === this.activeBuffer.scrollBottom) {
             this.scrollUp();
         } else {
             this.y += 1;
@@ -1345,7 +966,7 @@ export class Parser {
      */
     saveCursor() {
 
-        if(this.terminal.cursorRenderer)
+        if (this.terminal.cursorRenderer)
             this.terminal.cursorRenderer.clearCursor();
 
         this.activeBuffer.savedY = this.y;
@@ -1363,7 +984,7 @@ export class Parser {
     /**
      * 新建行
      */
-    newLine(){
+    newLine() {
 
         // let line = this.activeBuffer.getBlankLine2();
 
@@ -1376,28 +997,9 @@ export class Parser {
     }
 
     /**
-     * 更新缓冲区的内容
-     * @param chr
-     */
-    private update(chr: string) {
-
-        // 当行内容超过指定的数量的时候，需要再次换行。
-        if (this.x > this.activeBuffer.columns) {
-            this.nextLine(true);
-            // 光标重置
-            this.x = 1;
-        }
-
-        this.activeBuffer.replace(this.y - 1, this.x - 1, 1, this.terminal.esParser.attribute, chr);
-
-        this.x += 1;
-
-    }
-
-    /**
      * 创建一行，需要在滚动底部删除一行。
      */
-    insertLine(){
+    insertLine() {
 
         // 在指定的位置插入一行
         // let line = this.activeBuffer.getBlankLine2();
@@ -1415,12 +1017,12 @@ export class Parser {
     /**
      * 删除一行，需要在滚动底部填充一行。
      */
-    deleteLine(){
+    deleteLine() {
 
         // 在滚动底部添加行
         // const line = this.activeBuffer.getBlankLine2();
 
-        if(this.activeBuffer.scrollBottom === this.terminal.rows){
+        if (this.activeBuffer.scrollBottom === this.terminal.rows) {
             // 在底部添加
             // this.activeBuffer.append2(this.activeBuffer.getBlankBlocks(), line);
             // this.append(line);
@@ -1442,11 +1044,11 @@ export class Parser {
      * 向上滚动（可以查看下面的内容）
      * 原理：底部添加行，顶部删除行
      */
-    scrollUp(){
+    scrollUp() {
 
         // let line = this.activeBuffer.getBlankLine2();
         // let isUpdateScrollArea = false;
-        if(this.activeBuffer.scrollBottom === this.terminal.rows){
+        if (this.activeBuffer.scrollBottom === this.terminal.rows) {
             // 在底部添加
             // this.activeBuffer.append2(this.activeBuffer.getBlankBlocks(), line);
             // this.append(line);
@@ -1467,27 +1069,6 @@ export class Parser {
 
         // 如果是缓冲区第一个是顶行的话，就保存，否则需要删除。
         this.activeBuffer.removeLine(this.activeBuffer.scrollTop - 1, 1, this.activeBuffer.scrollTop === 1);
-        // savedLines['dirties']
-        // savedLines['blocks']
-        // savedLines['elements']
-
-        // if(this.terminal.render == RenderType.HTML){
-        //     if(savedLines['elements']){
-        //         let index = 0;
-        //         for(let element of savedLines['elements']){
-        //             this.printer.printLine(element, savedLines['blocks'][index], false);
-        //             index++;
-        //         }
-        //     }
-        // }
-
-
-        // 更新滚动区的高度。
-        // if(isUpdateScrollArea && this.terminal.render == RenderType.CANVAS){
-        //     // this.terminal.scrollArea.style.height =
-        //     //     ((this.terminal.rows + this.terminal.bufferSet.normal.cachedLines.length) * this.terminal.charHeight) + "px";
-        //     this.terminal.updateScrollAreaHeight();
-        // }
 
     }
 
@@ -1495,7 +1076,7 @@ export class Parser {
      * 向下滚动（可以查看上面的内容）
      * 原理：顶部添加行，底部删除行
      */
-    scrollDown(){
+    scrollDown() {
 
         // let line = this.activeBuffer.getBlankLine2();
 
@@ -1509,28 +1090,6 @@ export class Parser {
         this.activeBuffer.insertLine(this.activeBuffer.scrollTop - 1, 1);
 
     }
-
-    // /**
-    //  * 添加行
-    //  * @param newChild
-    //  */
-    // append(newChild: Node){
-    //     if(this.terminal.render === RenderType.HTML) {
-    //         this.viewport.appendChild(newChild);
-    //     }
-    // }
-    //
-    // /**
-    //  * 插入
-    //  * @param newChild
-    //  * @param refChild
-    //  */
-    // insertBefore(newChild: Node, refChild: Node){
-    //     if(this.terminal.render === RenderType.HTML) {
-    //         this.viewport.insertBefore(newChild, refChild);
-    //     }
-    // }
-
 
 
 }

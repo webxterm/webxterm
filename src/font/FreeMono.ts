@@ -6,8 +6,8 @@ export class FreeMono extends Font {
         super();
 
         this.fontSizes = {
-            "6pt":[4.8000030517578125,8.5],
-            "7pt":[5.5999908447265625,9.5],
+            "6pt": [4.8000030517578125, 8.5],
+            "7pt": [5.5999908447265625, 9.5],
             "8pt": [6.399993896484375, 11.5],
             "9pt": [7.20001220703125, 12.5],
             "10pt": [8, 14],
@@ -120,14 +120,14 @@ export class FreeMono extends Font {
     }
 }
 
-export class FreeMonoBold extends FreeMono{
+export class FreeMonoBold extends FreeMono {
 
     getFontName(): string {
         return "FreeMono Bold";
     }
 }
 
-export class FreeMonoOblique extends FreeMono{
+export class FreeMonoOblique extends FreeMono {
 
     getFontName(): string {
         return "FreeMono Oblique";

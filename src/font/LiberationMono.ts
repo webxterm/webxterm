@@ -1,13 +1,13 @@
 import {Font} from "./Font";
 
-export class LiberationMono extends Font{
+export class LiberationMono extends Font {
 
     constructor() {
         super();
 
         this.fontSizes = {
-            "6pt":[4.8000030517578125,9.5],
-            "7pt":[5.5999908447265625,11],
+            "6pt": [4.8000030517578125, 9.5],
+            "7pt": [5.5999908447265625, 11],
             "8pt": [6.399993896484375, 12.5],
             "9pt": [7.20001220703125, 14],
             "10pt": [8, 16],

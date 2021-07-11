@@ -307,13 +307,13 @@ export class Keyboard {
             return "";
         }
 
-        if(cursorApplicationMode){
+        if (cursorApplicationMode) {
             this.cursorKeysApplicationMapping();
         } else {
             this.cursorKeysNormalMapping();
         }
 
-        if(keypadApplicationMode){
+        if (keypadApplicationMode) {
             this.keypadApplicationMapping();
         } else {
             this.keypadNumericMapping();
@@ -328,7 +328,7 @@ export class Keyboard {
 
             console.info("modifiers:" + modifiers);
 
-            if(modifiers == 4){
+            if (modifiers == 4) {
                 return this.combinationKeys["CTRL+" + key.toUpperCase()];
             }
 

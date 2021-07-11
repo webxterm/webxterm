@@ -1,4 +1,3 @@
-
 enum LogLevel {
     NOTSET,
     DEBUG,
@@ -24,10 +23,10 @@ export class Logger {
     }
 
     debug(message: string, ...args: any[]): void {
-        if(this.level !== LogLevel.DEBUG) return;
+        if (this.level !== LogLevel.DEBUG) return;
 
-        if(args){
-            for(let item of args){
+        if (args) {
+            for (let item of args) {
                 message = message.replace(/\{}/, item);
             }
         }

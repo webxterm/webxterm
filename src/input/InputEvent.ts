@@ -1,9 +1,9 @@
 import {Composition} from "./Composition";
-import {RenderType, Terminal} from "../Terminal";
+import {Terminal} from "../Terminal";
 import {Keyboard} from "./Keyboard";
-import {Parser} from "../parser/Parser";
-import {LineBuffer} from "../buffer/LineBuffer";
+import {Buffer} from "../buffer/Buffer";
 import {ATTR_MODE_UNDERLINE, DataBlockAttribute} from "../buffer/DataBlockAttribute";
+import {CanvasSelectionSelectType} from "../selection/CanvasSelectionSelectType";
 
 /**
  * 输入事件
@@ -25,17 +25,18 @@ import {ATTR_MODE_UNDERLINE, DataBlockAttribute} from "../buffer/DataBlockAttrib
 
 // 英文特殊符号
 const symbols: string[] = [];
-for(let i = 32, chr; i < 127; i++){
+for (let i = 32, chr; i < 127; i++) {
     chr = String.fromCharCode(i);
-    if(48 <= i && i <= 57){
+    if (48 <= i && i <= 57) {
         // 0 - 9
         continue;
-    } else if((65 <= i && i <= 90) || (97 <= i && i <= 122)){
+    } else if ((65 <= i && i <= 90) || (97 <= i && i <= 122)) {
         // A-Z a-z
         continue;
     }
     symbols.push(chr);
 }
+
 //
 export class InputEvent {
 
@@ -73,7 +74,7 @@ export class InputEvent {
 
             console.info("compositionstart。。。", e);
 
-            if(e instanceof CompositionEvent) {
+            if (e instanceof CompositionEvent) {
                 // 输入之前先重置
                 this.processComposing.reset();
                 this.composing.reset();
@@ -93,7 +94,7 @@ export class InputEvent {
 
             console.info("compositionupdate。。。", e);
 
-            if(e instanceof CompositionEvent) {
+            if (e instanceof CompositionEvent) {
                 this.composing.update = e.data;
                 this.composing.state = 2;
                 console.info(JSON.stringify(this.composing));
@@ -109,7 +110,7 @@ export class InputEvent {
         // 联想输入结束
         this.target.addEventListener("compositionend", (e) => {
 
-            if(e instanceof CompositionEvent){
+            if (e instanceof CompositionEvent) {
 
                 this.composing.update = "";
                 this.composing.done = true;
@@ -150,7 +151,7 @@ export class InputEvent {
             // @ts-ignore
             console.info("this.target:" + this.target.value);
 
-            if(!this.isPreventDefault(e)){
+            if (!this.isPreventDefault(e)) {
                 // 不阻止默认
                 return;
             }
@@ -169,12 +170,12 @@ export class InputEvent {
             /// 桌面浏览器：MAC，Windows，Linux
             /// ------------------------------------------------------------------------------------
             // Safari
-            if(this.composing.isPC){
-                if(this.composing.running){
+            if (this.composing.isPC) {
+                if (this.composing.running) {
                     return;
                 }
                 //
-                if((e as any)['keyIdentifier'] == undefined){
+                if ((e as any)['keyIdentifier'] == undefined) {
                     // 非Safari的其他浏览器，如Firefox, Chrome, Opera, ...
                     if (isProcess) return;
                 } else {
@@ -197,18 +198,18 @@ export class InputEvent {
             /// 通过判断是否实现了屏幕旋转事件：onorientationchange
             /// ------------------------------------------------------------------------------------
             /// https://developer.mozilla.org/zh-CN/docs/Web/API/KeyboardEvent/code
-            if(!this.composing.isPC){
-                if(!this.composing.running){
+            if (!this.composing.isPC) {
+                if (!this.composing.running) {
 
-                    if((key.codePointAt(0) || 0x0) > 0xFFFF || /[\u3000-\u303F]/gi.test(key)){
+                    if ((key.codePointAt(0) || 0x0) > 0xFFFF || /[\u3000-\u303F]/gi.test(key)) {
                         // 四字节字符，如Emoji表情
-                        if(this.processComposing.running){
+                        if (this.processComposing.running) {
                             this.processComposing.reset();
                         }
                         this.target.value = "";
-                    } else if(e.code == 'Space'){
+                    } else if (e.code == 'Space') {
                         // 遇到特殊字符(中英文适用)取消联想输入
-                        if(this.processComposing.running){
+                        if (this.processComposing.running) {
                             this.sendMessage(this.processComposing.update);
                             this.processComposing.reset();
                         }
@@ -252,11 +253,11 @@ export class InputEvent {
 
                         console.info(JSON.stringify(this.processComposing))
                         return;
-                    // } else if(e.code == 'Backslash'){
+                        // } else if(e.code == 'Backslash'){
                         // https://developer.mozilla.org/zh-CN/docs/Web/API/KeyboardEvent/code
 
-                    } else if(e.code == 'Backspace'){
-                        if(this.processComposing.running){
+                    } else if (e.code == 'Backspace') {
+                        if (this.processComposing.running) {
                             // 这个步骤是手机输入法，清掉之前联想输入的字符，重新通过keydown事件e.key输入已选定的字符。
                             // 因此设定状态为结束联想输入。
                             this.processComposing.reset();
@@ -276,8 +277,8 @@ export class InputEvent {
 
                         console.info(JSON.stringify(this.processComposing))
 
-                    } else if(e.code == 'Enter'){
-                        if(this.processComposing.running){
+                    } else if (e.code == 'Enter') {
+                        if (this.processComposing.running) {
                             // 情况2：输入了一定数量的字符，然后按了"换行"/回车键，keySym为\r，this.processComposing.update为前面输入的内容
                             this.sendMessage(this.processComposing.update + keySym);
                             this.processComposing.reset();
@@ -304,8 +305,6 @@ export class InputEvent {
             // }
 
 
-
-
         });
 
         return this;
@@ -314,32 +313,32 @@ export class InputEvent {
     /**
      * 是否阻止默认行为
      */
-    private isPreventDefault(e: KeyboardEvent): boolean{
+    private isPreventDefault(e: KeyboardEvent): boolean {
 
-        if(this.composing.running){
+        if (this.composing.running) {
             return false;
         }
 
         if (e.metaKey) {
             let key = e.key.toLowerCase();
-            if(key === "meta"){
+            if (key === "meta") {
                 return false;
             }
             if ("cv".indexOf(key) !== -1) {
                 // MacOS: meta+c(复制), meta+v(粘贴)
                 return false;
-            } else if('a' === key){
+            } else if ('a' === key) {
                 // MacOS: meta+a(全选)
                 // if(this.terminal.renderType == RenderType.HTML){
-                    // this.quickSelectAll = true;
-                    // let sel = window.getSelection();
-                    // sel.selectAllChildren(this.terminal.outputEl);
-                    // this.target.blur();
+                // this.quickSelectAll = true;
+                // let sel = window.getSelection();
+                // sel.selectAllChildren(this.terminal.outputEl);
+                // this.target.blur();
                 // } else if(this.terminal.renderType == RenderType.CANVAS){
-                    // 全选。
-                if(this.terminal.selectionRenderer)
-                    this.terminal.selectionRenderer.selectAll(this.terminal.selection);
-                // }
+                // 全选。
+                // 全部定位在第一行。
+                this.terminal.selection.start(0, 0, 0).stop(-1, 0, 0);
+                this.terminal.emitSelect(CanvasSelectionSelectType.ALL);
                 return false;
             }
         }
@@ -351,7 +350,7 @@ export class InputEvent {
     /**
      * 初始化Input事件
      */
-    init(){
+    init() {
 
         // https://developer.mozilla.org/zh-CN/docs/Web/API/InputEvent
         // https://developer.mozilla.org/zh-CN/docs/Web/API/InputEvent/inputType
@@ -362,12 +361,12 @@ export class InputEvent {
             const inputType = (e as any)['inputType'];
             // 联想输入：insertCompositionText(Firefox, Chrome, Opera)，insertFromComposition(Safari)
             // 非联想输入：insertText
-            if(inputType == "insertCompositionText" || inputType == "insertFromComposition"){
+            if (inputType == "insertCompositionText" || inputType == "insertFromComposition") {
                 // 如果类型是这个的话，就说明已经调用了前面的Composition事件。
                 // 联想输入
                 console.info((e as any)['data']);
                 return;
-            } else if(inputType == "insertText"){
+            } else if (inputType == "insertText") {
                 // 需要插入
                 const data = (e as any)['data'];
                 this.sendMessage(data);
@@ -379,11 +378,11 @@ export class InputEvent {
     }
 
 
-    bindMobileSafariEvents(): void{
+    bindMobileSafariEvents(): void {
 
     }
 
-    bindSafariEvents(): void{
+    bindSafariEvents(): void {
 
     }
 
@@ -392,11 +391,14 @@ export class InputEvent {
     }
 
 
-    sendMessage(data: string){
-        if(data.length > 0){
+    sendMessage(data: string) {
+        if (data && data.length > 0) {
             let presentation = JSON.stringify({
                 cmd: data
             });
+
+            // 先取消选择
+            this.terminal.emitSelect(CanvasSelectionSelectType.CANCEL);
 
             console.info("发送的内容：" + presentation);
             this.terminal.transceiver.send(presentation);
@@ -415,7 +417,7 @@ export class InputEvent {
     private write_change_buffer(composing: Composition) {
 
         let data;
-        if(composing.done){
+        if (composing.done) {
             // 清除从 composing.x, composing.y 开始 - 结束的字符。
             // 有可能出现输入多行的情况
             // 如果结束联想输入，显示光标
@@ -424,7 +426,7 @@ export class InputEvent {
         } else {
 
             // 如果是联想输入，隐藏光标
-            if(this.terminal.cursor.show) this.terminal.cursor.show = false;
+            if (this.terminal.cursor.show) this.terminal.cursor.show = false;
             data = composing.update;
 
             // if(composing.state == 1){
@@ -460,14 +462,14 @@ export class InputEvent {
      */
     private flush_composing_display_buffer(data: string) {
 
-        let display_buffer = new LineBuffer(0);
+        let display_buffer = new Buffer(0);
         let change_buffer = this.terminal.bufferSet.activeBuffer.change_buffer;
         // 复制行
-        for(let y = 0; y < this.terminal.rows; y++){
+        for (let y = 0; y < this.terminal.rows; y++) {
             display_buffer.copyLineFrom(change_buffer, y);
         }
 
-        if(data.length == 0){
+        if (data.length == 0) {
             return display_buffer;
         }
 
@@ -488,7 +490,7 @@ export class InputEvent {
 
             // 当行内容超过指定的数量的时候，需要再次换行。
             if (x > self.terminal.columns) {
-                if(y == self.terminal.bufferSet.activeBuffer.scrollBottom){
+                if (y == self.terminal.bufferSet.activeBuffer.scrollBottom) {
                     // 最后一行
                     display_buffer.removeLine(0, 1);
                     display_buffer.appendLine(self.terminal.columns, 1);
@@ -500,8 +502,8 @@ export class InputEvent {
             }
 
             display_buffer.replace(y - 1, x - 1, charWidth, attr, s);
-            if(charWidth > 1){
-                display_buffer.replace(y - 1, x, 0, attr,"");
+            if (charWidth > 1) {
+                display_buffer.replace(y - 1, x, 0, attr, "");
             }
 
             x += charWidth;
@@ -512,12 +514,12 @@ export class InputEvent {
 
             // ascii字符
             const asciiStandardCode: number | undefined = s.codePointAt(0);
-            if(asciiStandardCode && 32 <= asciiStandardCode && asciiStandardCode < 127){
-                if(s.codePointAt(1) == undefined){
+            if (asciiStandardCode && 32 <= asciiStandardCode && asciiStandardCode < 127) {
+                if (s.codePointAt(1) == undefined) {
                     // 考虑emoji
                     update(s, 1);
                 }
-            } else if(/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(s)){
+            } else if (/[\u4E00-\u9FA5]|[\uFE30-\uFFA0]|[\u3000-\u303F]|[\u2E80-\u2EFF]/gi.test(s)) {
                 // 中文字符
                 // @Parser.handleDoubleChars
                 update(s, 2);
@@ -525,14 +527,15 @@ export class InputEvent {
         }
 
 
-        if(this.terminal.textRenderer) this.terminal.textRenderer.flushLines(display_buffer , false);
+        if (this.terminal.textRenderer) {
+            this.terminal.textRenderer.flushLines(display_buffer, false);
+        }
 
-        if(this.terminal.cursorRenderer){
+        if (this.terminal.cursorRenderer) {
             this.terminal.cursorRenderer.clearCursor();
             this.terminal.cursorRenderer.drawComposingCursor(x - 1, y);
         }
     }
-
 
 
 }

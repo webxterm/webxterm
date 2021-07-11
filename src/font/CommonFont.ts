@@ -1,6 +1,6 @@
 import {Font} from "./Font";
 
-export class CommonFont extends Font{
+export class CommonFont extends Font {
 
     private readonly fontName: string;
 
@@ -11,8 +11,8 @@ export class CommonFont extends Font{
 
         this.fontSizes = {
 
-            "6pt":[4.8166656494140625,9.5],
-            "7pt":[5.616668701171875,11.5],
+            "6pt": [4.8166656494140625, 9.5],
+            "7pt": [5.616668701171875, 11.5],
             "8pt": [6.4166717529296875, 13],
             "9pt": [7.2166595458984375, 14.5],
             "10pt": [8.033340454101562, 16],

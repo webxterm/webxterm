@@ -15,7 +15,7 @@ import {
 } from "../buffer/DataBlockAttribute";
 import {Preferences} from "../Preferences";
 import {Styles} from "../Styles";
-import {Buffer} from "../buffer/Buffer";
+import {BufferPool} from "../buffer/BufferPool";
 import {Color} from "../common/Color";
 
 
@@ -127,7 +127,7 @@ export class EscapeSequenceParser {
     // }
 
 
-    get activeBuffer(): Buffer {
+    get activeBuffer(): BufferPool {
         return this.parser.bufferSet.activeBuffer;
     }
 
@@ -566,7 +566,7 @@ export class EscapeSequenceParser {
         let begin: number = 1,
             end: number,
             scrollBack: boolean = false;
-            // fragment: DocumentFragment = document.createDocumentFragment();
+        // fragment: DocumentFragment = document.createDocumentFragment();
         switch (params[0]) {
             case 1:
                 end = this.parser.y;
@@ -604,7 +604,7 @@ export class EscapeSequenceParser {
         for (let y = begin; y <= end; y++) {
 
             // 比高水位还要高的话，就退出循环
-            if(y > this.activeBuffer.high_water){
+            if (y > this.activeBuffer.high_water) {
                 break;
             }
 
@@ -621,14 +621,14 @@ export class EscapeSequenceParser {
                 //     this.terminal.printer.printLine(savedLine, false);
                 // }
 
-                if(this.terminal.renderType === RenderType.CANVAS){
+                if (this.terminal.renderType === RenderType.CANVAS) {
                     // 使用画板渲染
                     // this.terminal.printer.drawLine(y, this.activeBuffer.getBlocks(y), false);
-                    if(y !== this.activeBuffer.y)
-                        if(this.terminal.textRenderer) this.terminal.textRenderer.clearLine(y);
+                    if (y !== this.activeBuffer.y)
+                        if (this.terminal.textRenderer) this.terminal.textRenderer.clearLine(y);
                     this.activeBuffer.insertLine(this.activeBuffer.scrollBottom - 1, 1);
 
-                    if(!updateScrollViewHeight) updateScrollViewHeight = true;
+                    if (!updateScrollViewHeight) updateScrollViewHeight = true;
                 } else {
 
                     // if(savedLines['elements']){
@@ -661,7 +661,7 @@ export class EscapeSequenceParser {
 
         // 重置高水位
         this.activeBuffer.resetHighWater();
-        if(updateScrollViewHeight){
+        if (updateScrollViewHeight) {
             this.terminal.updateScrollAreaHeight();
         }
     }
@@ -806,7 +806,7 @@ export class EscapeSequenceParser {
     // CSI Ps S  Scroll up Ps lines (default = 1) (SU), VT420, ECMA-48.
     scrollUpLines(params: number[]) {
         const ps = params[0] || 1;
-        for(let i = 0; i < ps; i++){
+        for (let i = 0; i < ps; i++) {
             this.parser.scrollUp();
         }
     }
@@ -856,7 +856,7 @@ export class EscapeSequenceParser {
     // orientation is vertical, such that the data appear to move down; where n equals the value of Pn.
     scrollDownLines(params: number[]) {
         const ps = params[0] || 1;
-        for(let i = 0; i < ps; i++){
+        for (let i = 0; i < ps; i++) {
             this.parser.scrollDown();
         }
 
@@ -1057,7 +1057,7 @@ export class EscapeSequenceParser {
     //             Ps = 4 5  ⇒  Reverse-wraparound Mode, xterm.
     //             Ps = 4 6  ⇒  Start Logging, xterm.  This is normally dis-
     //           abled by a compile-time option.
-    //             Ps = 4 7  ⇒  Use Alternate Screen BufferSet, xterm.  This may
+    //             Ps = 4 7  ⇒  Use Alternate Screen BufferPoolSet, xterm.  This may
     //           be disabled by the titeInhibit resource.
     //             Ps = 6 6  ⇒  Application keypad (DECNKM), VT320.
     //             Ps = 6 7  ⇒  Backarrow key sends backspace (DECBKM), VT340,
@@ -1108,14 +1108,14 @@ export class EscapeSequenceParser {
     //             Ps = 1 0 4 4  ⇒  Reuse the most recent data copied to CLIP-
     //           BOARD, xterm.  This enables the keepClipboard resource.
     //             Ps = 1 0 4 6  ⇒  Enable switching to/from Alternate Screen
-    //           BufferSet, xterm.  This works for terminfo-based systems, updat-
+    //           BufferPoolSet, xterm.  This works for terminfo-based systems, updat-
     //           ing the titeInhibit resource.
-    //             Ps = 1 0 4 7  ⇒  Use Alternate Screen BufferSet, xterm.  This
+    //             Ps = 1 0 4 7  ⇒  Use Alternate Screen BufferPoolSet, xterm.  This
     //           may be disabled by the titeInhibit resource.
     //             Ps = 1 0 4 8  ⇒  Save cursor as in DECSC, xterm.  This may
     //           be disabled by the titeInhibit resource.
     //             Ps = 1 0 4 9  ⇒  Save cursor as in DECSC, xterm.  After sav-
-    //           ing the cursor, switch to the Alternate Screen BufferSet, clear-
+    //           ing the cursor, switch to the Alternate Screen BufferPoolSet, clear-
     //           ing it first.  This may be disabled by the titeInhibit
     //           resource.  This control combines the effects of the 1 0 4 7
     //           and 1 0 4 8  modes.  Use this with terminfo-based applications
@@ -1184,7 +1184,7 @@ export class EscapeSequenceParser {
                 case 10:
                     break;
                 case 12:
-                    // Start Blinking Cursor (AT&T 610).
+                // Start Blinking Cursor (AT&T 610).
                 case 13:
                     // Start Blinking Cursor (set only via resource or menu).
                     this.terminal.cursor.blinking = true;
@@ -1317,7 +1317,7 @@ export class EscapeSequenceParser {
                     break;
                 case 1049:
                     // Save cursor as in DECSC, xterm.
-                    // After saving the cursor, switch to the Alternate Screen BufferSet, clearing it first.
+                    // After saving the cursor, switch to the Alternate Screen BufferPoolSet, clearing it first.
 
                     this.parser.saveCursor();
                     this.parser.activateAltBuffer();
@@ -1437,7 +1437,7 @@ export class EscapeSequenceParser {
     //             Ps = 4 5  ⇒  No Reverse-wraparound Mode, xterm.
     //             Ps = 4 6  ⇒  Stop Logging, xterm.  This is normally disabled
     //           by a compile-time option.
-    //             Ps = 4 7  ⇒  Use Normal Screen BufferSet, xterm.
+    //             Ps = 4 7  ⇒  Use Normal Screen BufferPoolSet, xterm.
     //             Ps = 6 6  ⇒  Numeric keypad (DECNKM), VT320.
     //             Ps = 6 7  ⇒  Backarrow key sends delete (DECBKM), VT340,
     //           VT420.  This sets the backarrowKey resource to "false".
@@ -1483,16 +1483,16 @@ export class EscapeSequenceParser {
     //             Ps = 1 0 4 3  ⇒  Disable raising of the window when Control-
     //           G is received, xterm.  This disables the popOnBell resource.
     //             Ps = 1 0 4 6  ⇒  Disable switching to/from Alternate Screen
-    //           BufferSet, xterm.  This works for terminfo-based systems, updat-
+    //           BufferPoolSet, xterm.  This works for terminfo-based systems, updat-
     //           ing the titeInhibit resource.  If currently using the Alter-
-    //           nate Screen BufferSet, xterm switches to the Normal Screen Buf-
+    //           nate Screen BufferPoolSet, xterm switches to the Normal Screen Buf-
     //           fer.
-    //             Ps = 1 0 4 7  ⇒  Use Normal Screen BufferSet, xterm.  Clear the
-    //           screen first if in the Alternate Screen BufferSet.  This may be
+    //             Ps = 1 0 4 7  ⇒  Use Normal Screen BufferPoolSet, xterm.  Clear the
+    //           screen first if in the Alternate Screen BufferPoolSet.  This may be
     //           disabled by the titeInhibit resource.
     //             Ps = 1 0 4 8  ⇒  Restore cursor as in DECRC, xterm.  This
     //           may be disabled by the titeInhibit resource.
-    //             Ps = 1 0 4 9  ⇒  Use Normal Screen BufferSet and restore cursor
+    //             Ps = 1 0 4 9  ⇒  Use Normal Screen BufferPoolSet and restore cursor
     //           as in DECRC, xterm.  This may be disabled by the titeInhibit
     //           resource.  This combines the effects of the 1 0 4 7  and 1 0 4
     //           8  modes.  Use this with terminfo-based applications rather
@@ -1567,7 +1567,7 @@ export class EscapeSequenceParser {
                     // Hide toolbar (rxvt).
                     break;
                 case 12:
-                    // Start Blinking Cursor (AT&T 610).
+                // Start Blinking Cursor (AT&T 610).
                 case 13:
                     // Start Blinking Cursor (set only via resource or menu).
                     this.terminal.cursor.blinking = false;
@@ -1696,7 +1696,7 @@ export class EscapeSequenceParser {
                     this.parser.activateNormalBuffer();
 
                     // 检查默认是否闪烁
-                    if(this.cursorBlinking !== this.terminal.cursor.blinking){
+                    if (this.cursorBlinking !== this.terminal.cursor.blinking) {
                         this.terminal.cursor.blinking = this.cursorBlinking;
                     }
                     // this.titeInhibit = false;
@@ -1710,7 +1710,7 @@ export class EscapeSequenceParser {
                     this.parser.activateNormalBuffer();
                     this.parser.restoreCursor();
                     // 检查默认是否闪烁
-                    if(this.cursorBlinking !== this.terminal.cursor.blinking){
+                    if (this.cursorBlinking !== this.terminal.cursor.blinking) {
                         this.terminal.cursor.blinking = this.cursorBlinking;
                     }
                     // this.titeInhibit = false;
@@ -2613,22 +2613,22 @@ export class EscapeSequenceParser {
                 // Omitted parameters reuse the current height or width.
                 break;
             case 9:
-                if(params[1] == 0){
+                if (params[1] == 0) {
                     // Restore maximized window.
-                } else if(params[1] == 1){
+                } else if (params[1] == 1) {
                     // Maximize window (i.e., resize to screen size).
-                } else if(params[1] == 2){
+                } else if (params[1] == 2) {
                     // Maximize window vertically.
-                } else if(params[1] == 3){
+                } else if (params[1] == 3) {
                     // Maximize window horizontally.
                 }
                 break;
             case 10:
-                if(params[1] == 0){
+                if (params[1] == 0) {
                     // Undo full-screen mode.
-                } else if(params[1] == 1){
+                } else if (params[1] == 1) {
                     // Change to full-screen.
-                } else if(params[1] == 2){
+                } else if (params[1] == 2) {
                     // Toggle full-screen.
                 }
                 break;
@@ -2658,29 +2658,29 @@ export class EscapeSequenceParser {
                 // Report xterm window's title. Result is OSC  l  label ST
                 break;
             case 22:
-                if(params[1] == 0){
+                if (params[1] == 0) {
                     // Save xterm icon and window title on stack.
-                } else if(params[1] == 1){
+                } else if (params[1] == 1) {
                     // Save xterm icon title on stack.
                     console.info("Save xterm icon title on stack.");
-                } else if(params[1] == 2){
+                } else if (params[1] == 2) {
                     // Save xterm window title on stack.
                     console.info("Save xterm window title on stack.");
                 }
                 break;
             case 23:
-                if(params[1] == 0){
+                if (params[1] == 0) {
                     // Restore xterm icon and window title from stack.
-                } else if(params[1] == 1){
+                } else if (params[1] == 1) {
                     // Restore xterm icon title from stack.
-                } else if(params[1] == 2){
+                } else if (params[1] == 2) {
                     // Restore xterm window title from stack.
                 }
                 break;
             default:
-                // >= 24
-                // Resize to Ps lines (DECSLPP), VT340 and VT420.
-                // xterm adapts this by resizing its window.
+            // >= 24
+            // Resize to Ps lines (DECSLPP), VT340 and VT420.
+            // xterm adapts this by resizing its window.
         }
     }
 

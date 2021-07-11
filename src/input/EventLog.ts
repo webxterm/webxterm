@@ -15,11 +15,11 @@ export class EventLog {
         this.logs[this.pos] = [];
     }
 
-    add(){
+    add() {
         this.logs[++this.pos] = [];
     }
 
-    append(item: string){
+    append(item: string) {
         // if(item === "\x7f"){
         //     // backspace
         //     this.logs[this.pos]

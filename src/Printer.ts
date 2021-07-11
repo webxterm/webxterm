@@ -1,6 +1,6 @@
 // import {Parser} from "./parser/Parser";
 // import {RenderType, Terminal} from "./Terminal";
-// import {Buffer} from "./buffer/Buffer";
+// import {BufferPool} from "./buffer/BufferPool";
 // import {DataBlockAttribute} from "./buffer/DataBlockAttribute";
 // import {CanvasRenderer} from "./CanvasRenderer";
 // import {DataBlock} from "./buffer/DataBlock";
@@ -22,7 +22,7 @@
 //         this.canvasRenderer = new CanvasRenderer(terminal);
 //     }
 //
-//     get activeBuffer(): Buffer {
+//     get activeBuffer(): BufferPool {
 //         return this.parser.bufferSet.activeBuffer;
 //     }
 //
